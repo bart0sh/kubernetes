@@ -148,10 +148,10 @@ func (r *Reset) Run(out io.Writer) error {
 	}
 
 	glog.Infoln("[reset] removing kubernetes-managed containers")
-	dockerCheck := preflight.ServiceCheck{Service: "docker", CheckIfActive: true}
 	execer := utilsexec.New()
+	runtimeCheck := preflight.GetRuntimeCheck(r.criSocketPath, execer)
 
-	reset(execer, dockerCheck, r.criSocketPath)
+	reset(execer, runtimeCheck, r.criSocketPath)
 
 	dirsToClean := []string{"/var/lib/kubelet", "/etc/cni/net.d", "/var/lib/dockershim", "/var/run/kubernetes"}
 
@@ -183,12 +183,11 @@ func (r *Reset) Run(out io.Writer) error {
 	return nil
 }
 
-func reset(execer utilsexec.Interface, dockerCheck preflight.Checker, criSocketPath string) {
-	crictlPath, err := execer.LookPath("crictl")
-	if err == nil {
-		resetWithCrictl(execer, dockerCheck, criSocketPath, crictlPath)
+func reset(execer utilsexec.Interface, runtimeCheck preflight.Checker, criSocketPath string) {
+	if runtimeCheck.Name() == "CRI" {
+		resetWithCrictl(execer, runtimeCheck, criSocketPath)
 	} else {
-		resetWithDocker(execer, dockerCheck)
+		resetWithDocker(execer, runtimeCheck)
 	}
 }
 
@@ -202,17 +201,24 @@ func resetWithDocker(execer utilsexec.Interface, dockerCheck preflight.Checker) 
 	}
 }
 
-func resetWithCrictl(execer utilsexec.Interface, dockerCheck preflight.Checker, criSocketPath, crictlPath string) {
+func resetWithCrictl(execer utilsexec.Interface, criCheck preflight.Checker, criSocketPath string) {
 	if criSocketPath != "" {
+		_, errors := criCheck.Check()
+		if len(errors) > 0 {
+			for _, err := range errors {
+				glog.V(1).Infof("[reset] %v", err)
+			}
+			return
+		}
 		glog.Infof("[reset] cleaning up running containers using crictl with socket %s\n", criSocketPath)
 		glog.V(1).Infoln("[reset] listing running pods using crictl")
 
+		crictlPath := "crictl"
 		params := []string{"-r", criSocketPath, "pods", "--quiet"}
 		glog.V(1).Infof("[reset] Executing command %s %s", crictlPath, strings.Join(params, " "))
 		output, err := execer.Command(crictlPath, params...).CombinedOutput()
 		if err != nil {
-			glog.Infof("[reset] failed to list running pods using crictl: %v. Trying to use docker instead", err)
-			resetWithDocker(execer, dockerCheck)
+			glog.Infof("[reset] failed to list running pods using crictl: %v", err)
 			return
 		}
 		sandboxes := strings.Split(string(output), " ")
@@ -224,21 +230,19 @@ func resetWithCrictl(execer utilsexec.Interface, dockerCheck preflight.Checker, 
 			params = []string{"-r", criSocketPath, "stopp", s}
 			glog.V(1).Infof("[reset] Executing command %s %s", crictlPath, strings.Join(params, " "))
 			if err := execer.Command(crictlPath, params...).Run(); err != nil {
-				glog.Infof("[reset] failed to stop the running containers using crictl: %v. Trying to use docker instead", err)
-				resetWithDocker(execer, dockerCheck)
+				glog.Infof("[reset] failed to stop the running containers using crictl: %v", err)
 				return
 			}
 			params = []string{"-r", criSocketPath, "rmp", s}
 			glog.V(1).Infof("[reset] Executing command %s %s", crictlPath, strings.Join(params, " "))
 			if err := execer.Command(crictlPath, params...).Run(); err != nil {
-				glog.Infof("[reset] failed to remove the running containers using crictl: %v. Trying to use docker instead", err)
-				resetWithDocker(execer, dockerCheck)
+				glog.Infof("[reset] failed to remove the running containers using crictl: %v", err)
 				return
 			}
 		}
 	} else {
-		glog.Infoln("[reset] CRI socket path not provided for crictl. Trying to use docker instead")
-		resetWithDocker(execer, dockerCheck)
+		glog.Infoln("[reset] CRI socket path not provided for crictl")
+		return
 	}
 }
 

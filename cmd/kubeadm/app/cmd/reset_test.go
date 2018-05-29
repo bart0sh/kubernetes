@@ -309,7 +309,7 @@ func TestResetWithCrictl(t *testing.T) {
 	}
 
 	// 1: socket path not provided, running with docker
-	resetWithCrictl(&fexec, newFakeDockerChecker(nil, nil), "", "crictl")
+	resetWithCrictl(&fexec, newFakeDockerChecker(nil, nil), "")
 	if fcmd.RunCalls != 1 {
 		t.Errorf("expected 1 call to Run, got %d", fcmd.RunCalls)
 	}
@@ -318,7 +318,7 @@ func TestResetWithCrictl(t *testing.T) {
 	}
 
 	// 2: socket path provided, now running with crictl (1x CombinedOutput, 2x Run)
-	resetWithCrictl(&fexec, newFakeDockerChecker(nil, nil), "/test.sock", "crictl")
+	resetWithCrictl(&fexec, newFakeDockerChecker(nil, nil), "/test.sock")
 	if fcmd.RunCalls != 3 {
 		t.Errorf("expected 3 calls to Run, got %d", fcmd.RunCalls)
 	}
@@ -330,7 +330,7 @@ func TestResetWithCrictl(t *testing.T) {
 	}
 
 	// 3: socket path provided, crictl fails, reset with docker
-	resetWithCrictl(&fexec, newFakeDockerChecker(nil, nil), "/test.sock", "crictl")
+	resetWithCrictl(&fexec, newFakeDockerChecker(nil, nil), "/test.sock")
 	if fcmd.RunCalls != 4 {
 		t.Errorf("expected 4 calls to Run, got %d", fcmd.RunCalls)
 	}
@@ -339,7 +339,7 @@ func TestResetWithCrictl(t *testing.T) {
 	}
 
 	// 4: running with no socket and docker fails (1x Run)
-	resetWithCrictl(&fexec, newFakeDockerChecker(nil, []error{errors.New("test error")}), "", "crictl")
+	resetWithCrictl(&fexec, newFakeDockerChecker(nil, []error{errors.New("test error")}), "")
 	if fcmd.RunCalls != 4 {
 		t.Errorf("expected 4 calls to Run, got %d", fcmd.RunCalls)
 	}

@@ -987,6 +987,16 @@ func RunJoinNodeChecks(execer utilsexec.Interface, cfg *kubeadmapi.NodeConfigura
 	return RunChecks(checks, os.Stderr, ignorePreflightErrors)
 }
 
+// GetRuntimeCheck returns either CRI or Docker check depending on runtime configuration
+func GetRuntimeCheck(criSocket string, execer utilsexec.Interface) Checker {
+	// Check whether or not the CRI socket defined is the default
+	if criSocket != kubeadmdefaults.DefaultCRISocket {
+		return CRICheck{socket: criSocket, exec: execer}
+	} else {
+		return ServiceCheck{Service: "docker", CheckIfActive: true}
+	}
+}
+
 // addCommonChecks is a helper function to deplicate checks that are common between both the
 // kubeadm init and join commands
 func addCommonChecks(execer utilsexec.Interface, cfg kubeadmapi.CommonConfiguration, checks []Checker) []Checker {
@@ -999,12 +1009,7 @@ func addCommonChecks(execer utilsexec.Interface, cfg kubeadmapi.CommonConfigurat
 		suggestion: fmt.Sprintf("go get %v", kubeadmconstants.CRICtlPackage),
 	}
 
-	// Check whether or not the CRI socket defined is the default
-	if cfg.GetCRISocket() != kubeadmdefaults.DefaultCRISocket {
-		checks = append(checks, CRICheck{socket: cfg.GetCRISocket(), exec: execer})
-	} else {
-		checks = append(checks, ServiceCheck{Service: "docker", CheckIfActive: true})
-	}
+	checks = append(checks, GetRuntimeCheck(cfg.GetCRISocket(), execer))
 
 	// non-windows checks
 	if runtime.GOOS == "linux" {

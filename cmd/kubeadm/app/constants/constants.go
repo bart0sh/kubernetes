@@ -399,6 +399,15 @@ var (
 	// KubeadmCertsClusterRoleName sets the name for the ClusterRole that allows
 	// the bootstrap tokens to access the kubeadm-certs Secret during the join of a new control-plane
 	KubeadmCertsClusterRoleName = fmt.Sprintf("kubeadm:%s", KubeadmCertsSecret)
+
+	// TEXTOutput is one of possible values of the -o/--output flag
+	TEXTOutput = "text"
+
+	// YAMLOutput is one of possible values of the -o/--output flag
+	YAMLOutput = "yaml"
+
+	// JSONOutput is one of possible values of the -o/--output flag
+	JSONOutput = "json"
 )
 
 // EtcdSupportedVersion returns officially supported version of etcd for a specific Kubernetes release

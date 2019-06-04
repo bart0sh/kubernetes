@@ -21,7 +21,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/lithammer/dedent"
@@ -30,8 +29,11 @@ import (
 	"k8s.io/klog"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/duration"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/printers"
 	clientset "k8s.io/client-go/kubernetes"
 	bootstrapapi "k8s.io/cluster-bootstrap/token/api"
 	bootstraputil "k8s.io/cluster-bootstrap/token/util"
@@ -39,6 +41,8 @@ import (
 	kubeadmscheme "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/scheme"
 	kubeadmapiv1beta2 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta2"
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/validation"
+	outputapischeme "k8s.io/kubernetes/cmd/kubeadm/app/apis/output/scheme"
+	outputapiv1alpha1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/output/v1alpha1"
 	"k8s.io/kubernetes/cmd/kubeadm/app/cmd/options"
 	cmdutil "k8s.io/kubernetes/cmd/kubeadm/app/cmd/util"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
@@ -47,6 +51,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 	configutil "k8s.io/kubernetes/cmd/kubeadm/app/util/config"
 	kubeconfigutil "k8s.io/kubernetes/cmd/kubeadm/app/util/kubeconfig"
+	kubeprinters "k8s.io/kubernetes/pkg/printers"
 )
 
 // NewCmdToken returns cobra.Command for token management
@@ -140,6 +145,8 @@ func NewCmdToken(out io.Writer, errW io.Writer) *cobra.Command {
 	tokenCmd.AddCommand(createCmd)
 	tokenCmd.AddCommand(NewCmdTokenGenerate(out))
 
+	var outputFormat string
+
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List bootstrap tokens on the server",
@@ -151,10 +158,12 @@ func NewCmdToken(out io.Writer, errW io.Writer) *cobra.Command {
 			client, err := getClientset(kubeConfigFile, dryRun)
 			kubeadmutil.CheckErr(err)
 
-			err = RunListTokens(out, errW, client)
+			err = RunListTokens(out, errW, client, kubeConfigFile, outputFormat)
 			kubeadmutil.CheckErr(err)
 		},
 	}
+
+	options.AddOutputFlag(listCmd.Flags(), &outputFormat)
 	tokenCmd.AddCommand(listCmd)
 
 	deleteCmd := &cobra.Command{
@@ -265,8 +274,62 @@ func RunGenerateToken(out io.Writer) error {
 	return nil
 }
 
+func formatBootstrapToken(obj *outputapiv1alpha1.BootstrapToken, options kubeprinters.PrintOptions) ([]metav1beta1.TableRow, error) {
+	ttl := "<forever>"
+	expires := "<never>"
+	if obj.Expires != nil {
+		ttl = duration.ShortHumanDuration(obj.Expires.Sub(time.Now()))
+		expires = obj.Expires.Format(time.RFC3339)
+	}
+	ttl = fmt.Sprintf("%-9s", ttl)
+
+	usages := strings.Join(obj.Usages, ",")
+	if len(usages) == 0 {
+		usages = "<none>"
+	}
+	usages = fmt.Sprintf("%-22s", usages)
+
+	description := obj.Description
+	if len(description) == 0 {
+		description = "<none>"
+	}
+	description = fmt.Sprintf("%-56s", description)
+
+	groups := strings.Join(obj.Groups, ",")
+	if len(groups) == 0 {
+		groups = "<none>"
+	}
+
+	return []metav1beta1.TableRow{{Cells: []interface{}{obj.Token.String(), ttl, expires, usages, description, groups}}}, nil
+}
+
+func toPrinter(outputFormat string, out io.Writer) (printers.ResourcePrinter, error) {
+	switch of := strings.ToLower(outputFormat); of {
+	case kubeadmconstants.TEXTOutput:
+		printer := kubeprinters.NewTablePrinter(kubeprinters.PrintOptions{})
+		columns := []metav1.TableColumnDefinition{
+			{Name: "Token"},
+			{Name: "TTL"},
+			{Name: "Expires"},
+			{Name: "Usages"},
+			{Name: "Description"},
+			{Name: "Extra Groups"},
+		}
+		printer.TableHandler(columns, formatBootstrapToken)
+		return printer, nil
+	case kubeadmconstants.JSONOutput:
+		return printers.NewTypeSetter(outputapischeme.Scheme).ToPrinter(&printers.JSONPrinter{}), nil
+	case kubeadmconstants.YAMLOutput:
+		return printers.NewTypeSetter(outputapischeme.Scheme).ToPrinter(&printers.YAMLPrinter{}), nil
+	default:
+		return nil, genericclioptions.NoCompatiblePrinterError{
+			OutputFormat:   &outputFormat,
+			AllowedFormats: []string{kubeadmconstants.TEXTOutput, kubeadmconstants.YAMLOutput, kubeadmconstants.JSONOutput}}
+	}
+}
+
 // RunListTokens lists details on all existing bootstrap tokens on the server.
-func RunListTokens(out io.Writer, errW io.Writer, client clientset.Interface) error {
+func RunListTokens(out io.Writer, errW io.Writer, client clientset.Interface, kubeConfigFile, outputFormat string) error {
 	// First, build our selector for bootstrap tokens only
 	klog.V(1).Infoln("[token] preparing selector for bootstrap token")
 	tokenSelector := fields.SelectorFromSet(
@@ -287,10 +350,12 @@ func RunListTokens(out io.Writer, errW io.Writer, client clientset.Interface) er
 		return errors.Wrap(err, "failed to list bootstrap tokens")
 	}
 
-	w := tabwriter.NewWriter(out, 10, 4, 3, ' ', 0)
-	fmt.Fprintln(w, "TOKEN\tTTL\tEXPIRES\tUSAGES\tDESCRIPTION\tEXTRA GROUPS")
-	for _, secret := range secrets.Items {
+	printer, err := toPrinter(outputFormat, out)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create printer for otput format %s", outputFormat)
+	}
 
+	for _, secret := range secrets.Items {
 		// Get the BootstrapToken struct representation from the Secret object
 		token, err := kubeadmapi.BootstrapTokenFromSecret(&secret)
 		if err != nil {
@@ -298,11 +363,20 @@ func RunListTokens(out io.Writer, errW io.Writer, client clientset.Interface) er
 			continue
 		}
 
-		// Get the human-friendly string representation for the token
-		humanFriendlyTokenOutput := humanReadableBootstrapToken(token)
-		fmt.Fprintln(w, humanFriendlyTokenOutput)
+		// Convert token into versioned output structure
+		outputToken := outputapiv1alpha1.BootstrapToken{
+			Token:       &kubeadmapiv1beta2.BootstrapTokenString{ID: token.Token.ID, Secret: token.Token.Secret},
+			Description: token.Description,
+			TTL:         token.TTL,
+			Expires:     token.Expires,
+			Usages:      token.Usages,
+			Groups:      token.Groups,
+		}
+
+		if err := printer.PrintObj(&outputToken, out); err != nil {
+			return errors.Wrapf(err, "unable to print token %s", token.Token)
+		}
 	}
-	w.Flush()
 	return nil
 }
 
@@ -330,32 +404,6 @@ func RunDeleteTokens(out io.Writer, client clientset.Interface, tokenIDsOrTokens
 		fmt.Fprintf(out, "bootstrap token %q deleted\n", tokenID)
 	}
 	return nil
-}
-
-func humanReadableBootstrapToken(token *kubeadmapi.BootstrapToken) string {
-	description := token.Description
-	if len(description) == 0 {
-		description = "<none>"
-	}
-
-	ttl := "<forever>"
-	expires := "<never>"
-	if token.Expires != nil {
-		ttl = duration.ShortHumanDuration(token.Expires.Sub(time.Now()))
-		expires = token.Expires.Format(time.RFC3339)
-	}
-
-	usagesString := strings.Join(token.Usages, ",")
-	if len(usagesString) == 0 {
-		usagesString = "<none>"
-	}
-
-	groupsString := strings.Join(token.Groups, ",")
-	if len(groupsString) == 0 {
-		groupsString = "<none>"
-	}
-
-	return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s", token.Token.String(), ttl, expires, usagesString, description, groupsString)
 }
 
 func getClientset(file string, dryRun bool) (clientset.Interface, error) {

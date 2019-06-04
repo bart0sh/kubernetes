@@ -17,6 +17,7 @@ limitations under the License.
 package options
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -79,4 +80,11 @@ func AddKubernetesVersionFlag(fs *pflag.FlagSet, kubernetesVersion *string) {
 		kubernetesVersion, KubernetesVersion, *kubernetesVersion,
 		`Choose a specific Kubernetes version for the control plane.`,
 	)
+}
+
+// AddOutputFlag adds the --output/-o flag to the given flagset
+func AddOutputFlag(fs *pflag.FlagSet, outputFormat *string) {
+	fs.StringVarP(
+		outputFormat, "output", "o", constants.TEXTOutput,
+		fmt.Sprintf("Output format; available options are: %s, %s and %s", constants.TEXTOutput, constants.YAMLOutput, constants.JSONOutput))
 }

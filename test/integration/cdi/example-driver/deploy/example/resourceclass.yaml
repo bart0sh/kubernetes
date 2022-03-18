@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ResourceClass
+metadata:
+  name: example
+driverName: example-driver.cdi.k8s.io
+# TODO:
+# parameters

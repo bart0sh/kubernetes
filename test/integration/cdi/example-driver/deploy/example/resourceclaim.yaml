@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example-claim-parameters
+  namespace: default
+data:
+  a: b
+---
+apiVersion: v1
+kind: ResourceClaim
+metadata:
+  name: example
+  namespace: default
+spec:
+  allocationMode: Immediate
+  resourceClassName: example
+  parameters:
+    apiVersion: v1
+    kind: ConfigMap
+    name: example-claim-parameters

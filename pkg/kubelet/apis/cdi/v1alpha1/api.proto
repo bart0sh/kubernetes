@@ -1,0 +1,72 @@
+/*
+Copyright 2022 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package v1beta1;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option go_package = "cdi";
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.goproto_getters_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
+
+service Node {
+  rpc NodePrepareResource (NodePrepareResourceRequest)
+    returns (NodePrepareResourceResponse) {}
+
+  rpc NodeUnprepareResource (NodeUnprepareResourceRequest)
+    returns (NodeUnprepareResourceResponse) {}
+
+  rpc NodeGetInfo (NodeGetInfoRequest)
+    returns (NodeGetInfoResponse) {}
+}
+
+message NodePrepareResourceRequest {
+    // The ID of the resource to prepare. This field is REQUIRED.
+    string resource_id = 1;
+}
+
+message NodePrepareResourceResponse {
+    // Intentionally empty.
+}
+
+message NodeUnprepareResourceRequest {
+    // The ID of the resource to unprepare. This field is REQUIRED.
+    string resource_id = 1;
+}
+
+message NodeUnprepareResourceResponse {
+    // Intentionally empty.
+}
+
+message NodeGetInfoRequest {
+}
+
+message NodeGetInfoResponse {
+    // The identifier of the node as understood by the SP.
+    // This field is REQUIRED.
+    // This field MUST contain enough information to uniquely identify
+    // this specific node vs all other nodes supported by this plugin.
+    // The SP is NOT responsible for global uniqueness of node_id across
+    // multiple SPs.
+    string node_id = 1;
+}

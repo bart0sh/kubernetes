@@ -21,4 +21,6 @@ const (
 	CSIPlugin = "CSIPlugin"
 	// DevicePlugin identifier for registered device plugins
 	DevicePlugin = "DevicePlugin"
+	// CDIPlugin identifier for registered CDI plugins
+	CDIPlugin = "CDIPlugin"
 )

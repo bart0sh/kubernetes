@@ -753,7 +753,9 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 
 	// setup resourceManager
-	klet.resourceManager = resourcemanager.NewResourceManager(nodeName)
+	if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
+		klet.resourceManager = resourcemanager.NewResourceManager(nodeName)
+	}
 
 	// setup volumeManager
 	klet.volumeManager = volumemanager.NewVolumeManager(
@@ -1431,7 +1433,9 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 	}
 
 	// Start resource manager
-	go kl.resourceManager.Run(kl.sourcesReady, wait.NeverStop)
+	if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
+		go kl.resourceManager.Run(kl.sourcesReady, wait.NeverStop)
+	}
 
 	// Start volume manager
 	go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)

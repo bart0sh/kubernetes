@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
+	"k8s.io/kubernetes/pkg/kubelet/resourcemanager/cache"
 )
 
 // Reconciler runs a periodic loop to reconcile the desired state of the world
@@ -52,9 +53,11 @@ func NewReconciler(nodeName types.NodeName) Reconciler {
 }
 
 type reconciler struct {
-	nodeName          types.NodeName
-	loopSleepDuration time.Duration
-	timeOfLastSync    time.Time
+	nodeName            types.NodeName
+	actualStateOfWorld  cache.ActualStateOfWorld
+	desiredStateOfWorld cache.DesiredStateOfWorld
+	loopSleepDuration   time.Duration
+	timeOfLastSync      time.Time
 }
 
 func (rc *reconciler) Run(stopCh <-chan struct{}) {
@@ -86,6 +89,12 @@ func (rc *reconciler) reconcile() {
 func (rc *reconciler) unprepareResources() {
 	// Ensure resources that should be unprepared are unprepared.
 	klog.InfoS("Reconciler: unprepare resources")
+	for _, preparedResource := range rc.actualStateOfWorld.GetAllPreparedResources() {
+		if !rc.desiredStateOfWorld.PodExistsInResource(preparedResource.PodName, preparedResource.ResourceName) {
+			// Resource is prepared, unprepare it
+			klog.V(5).InfoS("Reconciler: unpreparing prepared resource %+v", preparedResource)
+		}
+	}
 }
 
 func (rc *reconciler) prepareResources() {

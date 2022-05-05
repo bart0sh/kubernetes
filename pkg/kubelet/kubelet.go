@@ -92,6 +92,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/preemption"
 	"k8s.io/kubernetes/pkg/kubelet/prober"
 	proberesults "k8s.io/kubernetes/pkg/kubelet/prober/results"
+	"k8s.io/kubernetes/pkg/kubelet/resourcemanager"
 	"k8s.io/kubernetes/pkg/kubelet/runtimeclass"
 	"k8s.io/kubernetes/pkg/kubelet/secret"
 	"k8s.io/kubernetes/pkg/kubelet/server"
@@ -751,6 +752,9 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		klet.dnsConfigurer.SetupDNSinContainerizedMounter(experimentalMounterPath)
 	}
 
+	// setup resourceManager
+	klet.resourceManager = resourcemanager.NewResourceManager(nodeName)
+
 	// setup volumeManager
 	klet.volumeManager = volumemanager.NewVolumeManager(
 		kubeCfg.EnableControllerAttachDetach,
@@ -969,6 +973,11 @@ type Kubelet struct {
 
 	// Syncs pods statuses with apiserver; also used as a cache of statuses.
 	statusManager status.Manager
+
+	// ResourceManager runs a set of asynchronous loops that figure out which
+	// resources need to be prepared/unprepared based on the pods
+	// scheduled on this node and makes it so.
+	resourceManager resourcemanager.ResourceManager
 
 	// VolumeManager runs a set of asynchronous loops that figure out which
 	// volumes need to be attached/mounted/unmounted/detached based on the pods
@@ -1420,6 +1429,9 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 		klog.ErrorS(err, "Failed to initialize internal modules")
 		os.Exit(1)
 	}
+
+	// Start resource manager
+	go kl.resourceManager.Run(kl.sourcesReady, wait.NeverStop)
 
 	// Start volume manager
 	go kl.volumeManager.Run(kl.sourcesReady, wait.NeverStop)

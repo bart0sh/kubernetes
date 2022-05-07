@@ -67,6 +67,7 @@ import (
 	kubeletconfiginternal "k8s.io/kubernetes/pkg/kubelet/apis/config"
 	"k8s.io/kubernetes/pkg/kubelet/apis/podresources"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
+	"k8s.io/kubernetes/pkg/kubelet/cdi"
 	kubeletcertificate "k8s.io/kubernetes/pkg/kubelet/certificate"
 	"k8s.io/kubernetes/pkg/kubelet/cloudresource"
 	"k8s.io/kubernetes/pkg/kubelet/cm"
@@ -92,7 +93,6 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/preemption"
 	"k8s.io/kubernetes/pkg/kubelet/prober"
 	proberesults "k8s.io/kubernetes/pkg/kubelet/prober/results"
-	"k8s.io/kubernetes/pkg/kubelet/resourcemanager"
 	"k8s.io/kubernetes/pkg/kubelet/runtimeclass"
 	"k8s.io/kubernetes/pkg/kubelet/secret"
 	"k8s.io/kubernetes/pkg/kubelet/server"
@@ -752,9 +752,9 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		klet.dnsConfigurer.SetupDNSinContainerizedMounter(experimentalMounterPath)
 	}
 
-	// setup resourceManager
+	// setup CDI resoruce manager
 	if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
-		klet.resourceManager = resourcemanager.NewResourceManager(nodeName, klet.podManager)
+		klet.cdiManager = cdi.NewResourceManager(nodeName, klet.podManager)
 	}
 
 	// setup volumeManager
@@ -976,10 +976,10 @@ type Kubelet struct {
 	// Syncs pods statuses with apiserver; also used as a cache of statuses.
 	statusManager status.Manager
 
-	// ResourceManager runs a set of asynchronous loops that figure out which
+	// cdiManager runs a set of asynchronous loops that figure out which
 	// resources need to be prepared/unprepared based on the pods
 	// scheduled on this node and makes it so.
-	resourceManager resourcemanager.ResourceManager
+	cdiManager cdi.ResourceManager
 
 	// VolumeManager runs a set of asynchronous loops that figure out which
 	// volumes need to be attached/mounted/unmounted/detached based on the pods
@@ -1434,7 +1434,7 @@ func (kl *Kubelet) Run(updates <-chan kubetypes.PodUpdate) {
 
 	// Start resource manager
 	if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
-		go kl.resourceManager.Run(kl.sourcesReady, wait.NeverStop)
+		go kl.cdiManager.Run(kl.sourcesReady, wait.NeverStop)
 	}
 
 	// Start volume manager

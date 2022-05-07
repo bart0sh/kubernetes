@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
-	"k8s.io/kubernetes/pkg/kubelet/resourcemanager/cache"
+	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
 )
 
 // Reconciler runs a periodic loop to reconcile the desired state of the world

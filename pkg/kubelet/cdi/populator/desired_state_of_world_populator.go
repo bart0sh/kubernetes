@@ -31,10 +31,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	cditypes "k8s.io/kubernetes/pkg/apis/cdi"
+	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/pod"
-	"k8s.io/kubernetes/pkg/kubelet/resourcemanager/cache"
 )
 
 // DesiredStateOfWorldPopulator periodically loops through the list of active

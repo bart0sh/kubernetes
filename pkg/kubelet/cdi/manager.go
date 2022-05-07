@@ -14,16 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package resourcemanager
+package cdi
 
 import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
+	"k8s.io/kubernetes/pkg/kubelet/cdi/populator"
+	"k8s.io/kubernetes/pkg/kubelet/cdi/reconciler"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/pod"
-	"k8s.io/kubernetes/pkg/kubelet/resourcemanager/populator"
-	"k8s.io/kubernetes/pkg/kubelet/resourcemanager/reconciler"
 )
 
 // ResourceManager runs a set of asynchronous loops that figure out which resources

@@ -42,7 +42,7 @@ const (
 // on the node and the pods that the manager believes have successfully prepared
 // the resources.
 type ActualStateOfWorld interface {
-	// GetAllPreparedResources returns list of all possibly prepared resources
+	// GetAllPreparedResources returns list of all prepared resources
 	GetAllPreparedResources() []PreparedResource
 }
 
@@ -114,7 +114,7 @@ type attachedPod struct {
 	resourceStateForPod cditypes.ResourcePreparationState
 }
 
-// GetAllPreparedResources returns all resources which could be prepared for a pod.
+// GetAllPreparedResources returns resources which could be prepared for a pod.
 func (asw *actualStateOfWorld) GetAllPreparedResources() []PreparedResource {
 	asw.RLock()
 	defer asw.RUnlock()

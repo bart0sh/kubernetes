@@ -20,7 +20,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
-	"k8s.io/kubernetes/pkg/kubelet/cdi/populator"
+	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/reconciler"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/pod"
@@ -39,19 +39,15 @@ type resourceManager struct {
 	// desiredStateOfWorld with the actualStateOfWorld by triggering attach,
 	// detach, mount, and unmount operations using the operationExecutor.
 	reconciler reconciler.Reconciler
-
-	// desiredStateOfWorldPopulator runs an asynchronous periodic loop to
-	// populate the desiredStateOfWorld using the kubelet PodManager.
-	desiredStateOfWorldPopulator populator.DesiredStateOfWorldPopulator
 }
 
 // NewResourceManager returns a new concrete instance implementing the
 // ResourceManager interface.
 func NewResourceManager(nodeName k8stypes.NodeName, podManager pod.Manager) ResourceManager {
-	rm := &resourceManager{}
-
-	rm.reconciler = reconciler.NewReconciler(nodeName)
-	return rm
+	return &resourceManager{
+		reconciler: reconciler.NewReconciler(nodeName, cache.NewDesiredStateOfWorld(),
+			cache.NewActualStateOfWorld(nodeName)),
+	}
 }
 
 func (rm *resourceManager) Run(sourcesReady config.SourcesReady, stopCh <-chan struct{}) {

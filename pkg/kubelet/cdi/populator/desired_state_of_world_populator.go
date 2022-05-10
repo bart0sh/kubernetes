@@ -142,6 +142,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods() {
 			// Do not (re)add volumes for pods that can't also be starting containers
 			continue
 		}
+		klog.V(4).Infof("findAndAddNewPods: pod: %+v, resources: %+v", pod, preparedResourcesForPod)
 		dswp.processPodResources(pod, preparedResourcesForPod)
 	}
 }

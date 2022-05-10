@@ -45,10 +45,13 @@ type Reconciler interface {
 
 // NewReconciler returns a new instance of Reconciler.
 // nodeName - the Name for this node
-func NewReconciler(nodeName types.NodeName) Reconciler {
+func NewReconciler(nodeName types.NodeName, desiredStateOfWorld cache.DesiredStateOfWorld,
+	actualStateOfWorld cache.ActualStateOfWorld) Reconciler {
 	return &reconciler{
-		nodeName:       nodeName,
-		timeOfLastSync: time.Time{},
+		nodeName:            nodeName,
+		desiredStateOfWorld: desiredStateOfWorld,
+		actualStateOfWorld:  actualStateOfWorld,
+		timeOfLastSync:      time.Time{},
 	}
 }
 
@@ -88,7 +91,6 @@ func (rc *reconciler) reconcile() {
 
 func (rc *reconciler) unprepareResources() {
 	// Ensure resources that should be unprepared are unprepared.
-	klog.InfoS("Reconciler: unprepare resources")
 	for _, preparedResource := range rc.actualStateOfWorld.GetAllPreparedResources() {
 		if !rc.desiredStateOfWorld.PodExistsInResource(preparedResource.PodName, preparedResource.ResourceName) {
 			// Resource is prepared, unprepare it
@@ -99,7 +101,7 @@ func (rc *reconciler) unprepareResources() {
 
 func (rc *reconciler) prepareResources() {
 	// Ensure resources that should be prepared are prepared.
-	klog.InfoS("Reconciler: unprepare resources")
+	//klog.InfoS("Reconciler: prepare resources")
 }
 
 // sync process tries to observe the real world by scanning all pods' volume directories from the disk.

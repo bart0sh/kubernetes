@@ -54,7 +54,7 @@ type ResourceToPrepare struct {
 }
 
 // NewDesiredStateOfWorld returns a new instance of DesiredStateOfWorld.
-func NewDesiredStateOfWorld(volumePluginMgr *volume.VolumePluginMgr) DesiredStateOfWorld {
+func NewDesiredStateOfWorld() DesiredStateOfWorld {
 	return &desiredStateOfWorld{
 		resourcesToPrepare: make(map[cditypes.UniqueResourceName]resourceToPrepare),
 		podErrors:          make(map[cditypes.UniquePodName]sets.String),

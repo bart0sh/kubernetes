@@ -1722,13 +1722,19 @@ func (kl *Kubelet) syncPod(ctx context.Context, updateType kubetypes.SyncPodType
 		return false, err
 	}
 
-	// Volume manager will not mount volumes for terminating pods
+	// Volume manager will not mount volumes and CDI manager will not prepare resources for terminating pods
 	// TODO: once context cancellation is added this check can be removed
 	if !kl.podWorkers.IsPodTerminationRequested(pod.UID) {
 		// Wait for volumes to attach/mount
 		if err := kl.volumeManager.WaitForAttachAndMount(pod); err != nil {
 			kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedMountVolume, "Unable to attach or mount volumes: %v", err)
 			klog.ErrorS(err, "Unable to attach or mount volumes for pod; skipping pod", "pod", klog.KObj(pod))
+			return false, err
+		}
+
+		if err := kl.cdiManager.WaitForPreparedResources(pod); err != nil {
+			kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedPrepareCDI, "Unable to prepare CDI resource: %v", err)
+			klog.ErrorS(err, "Unable to prepare CDI resources for pod; skipping pod", "pod", klog.KObj(pod))
 			return false, err
 		}
 	}

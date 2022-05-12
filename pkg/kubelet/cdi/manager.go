@@ -17,8 +17,14 @@ limitations under the License.
 package cdi
 
 import (
+	"errors"
+	"fmt"
+	"time"
+
+	v1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/reconciler"
@@ -26,9 +32,33 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/pod"
 )
 
+const (
+	// podPrepareResourceTimeout is the maximum amount of time the
+	// WaitForPreparedResources call will wait for all CDI resources in the specified pod
+	// to be prepared. Even though resource preparation operations can take long
+	// to complete, we set the timeout to 2 minutes because kubelet
+	// will retry in the next sync iteration. This frees the associated
+	// goroutine of the pod to process newer updates if needed (e.g., a delete
+	// request to the pod).
+	// Value is slightly offset from 2 minutes to make timeouts due to this
+	// constant recognizable.
+	podPrepareResourceTimeout = 2*time.Minute + 3*time.Second
+
+	// podPrepareResourceTimeout is the amount of time the GetResourcesForPod
+	// call waits before retrying
+	podPrepareResourceRetryInterval = 300 * time.Millisecond
+)
+
 // ResourceManager runs a set of asynchronous loops that figure out which resources
 // need to be prepared based on the pods scheduled on this node and makes it so.
 type ResourceManager interface {
+	// WaitForPreparedResources processes the resources referenced in the specified
+	// pod and blocks until they are all prepared (reflected in
+	// actual state of the world).
+	// An error is returned if all resources are not prepared within
+	// the duration defined in resourcePrepareTimeout.
+	WaitForPreparedResources(pod *v1.Pod) error
+
 	// Starts the resource manager and all the asynchronous loops that it controls
 	Run(sourcesReady config.SourcesReady, stopCh <-chan struct{})
 }
@@ -58,4 +88,77 @@ func (rm *resourceManager) Run(sourcesReady config.SourcesReady, stopCh <-chan s
 
 	<-stopCh
 	klog.InfoS("Shutting down Kubelet Resource Manager")
+}
+
+// verifyResourcesPreparedFunc returns a method that returns true when all expected
+// resources are prepared.
+func (rm *resourceManager) verifyResourcesPreparedFunc(podName cache.UniquePodName, expectedResources []string) wait.ConditionFunc {
+	return func() (done bool, err error) {
+		//return true, nil
+		return false, errors.New("fake preparation error")
+		/*if errs := rm.desiredStateOfWorld.PopPodErrors(podName); len(errs) > 0 {
+			return true, errors.New(strings.Join(errs, "; "))
+		}
+		return len(rm.getUnpreparedResources(podName, expectedResources)) == 0, nil*/
+	}
+}
+
+func (rm *resourceManager) WaitForPreparedResources(pod *v1.Pod) error {
+	if pod == nil {
+		return nil
+	}
+
+	if len(pod.Spec.ResourceClaims) == 0 {
+		return nil
+	}
+
+	expectedResources := getExpectedResources(pod)
+	if len(expectedResources) == 0 {
+		// No resources to verify
+		return nil
+	}
+
+	klog.V(3).InfoS("Waiting for resources to be prepared for pod %s %s", pod.Name, pod.Status.Phase)
+	uniquePodName := GetUniquePodName(pod)
+
+	// Some pods expect to have Setup called over and over again to update.
+	// Remount plugins for which this is true. (Atomically updating volumes,
+	// like Downward API, depend on this to update the contents of the volume).
+	//vm.desiredStateOfWorldPopulator.ReprocessPod(uniquePodName)
+
+	err := wait.PollImmediate(
+		podPrepareResourceRetryInterval,
+		podPrepareResourceTimeout,
+		rm.verifyResourcesPreparedFunc(uniquePodName, expectedResources))
+
+	if err != nil {
+		/*unpreparedResources :=
+			rm.getUnpreparedResources(uniquePodName, expectedResources)
+
+		if len(unpreparedResources) == 0 {
+			return nil
+		}
+
+		return fmt.Errorf(
+			"unprepared resources=%v: %s",
+			unpreparedResources,
+			err)*/
+		return fmt.Errorf("resource preparation failed")
+	}
+
+	klog.V(3).InfoS("All resources are prepared for pod %s %s", pod.Name, pod.Status.Phase)
+	return nil
+}
+
+// GetUniquePodName returns a unique identifier to reference a pod by
+func GetUniquePodName(pod *v1.Pod) cache.UniquePodName {
+	return cache.UniquePodName(pod.UID)
+}
+
+// getExpectedResources returns a list of resources that must be prepared in order to
+// consider the resources setup step for this pod satisfied.
+func getExpectedResources(pod *v1.Pod) []string {
+	//mounts, devices := GetPodResourceNames(pod)
+	//return mounts.Union(devices).UnsortedList()
+	return []string{"fake resource"}
 }

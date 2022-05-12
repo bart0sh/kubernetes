@@ -26,7 +26,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	cditypes "k8s.io/kubernetes/pkg/apis/cdi"
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/kubernetes/pkg/volume/util/types"
 )
@@ -46,7 +45,7 @@ type DesiredStateOfWorld interface {
 	// volume, false is returned.
 	// If a volume with the name volumeName does not exist in the list of
 	// attached volumes, false is returned.
-	PodExistsInResource(podName cditypes.UniquePodName, resourceName cditypes.UniqueResourceName) bool
+	PodExistsInResource(podName UniquePodName, resourceName UniqueResourceName) bool
 }
 
 // ResourceToPrepare represents a resource that needs to be prepared for PodName
@@ -56,8 +55,8 @@ type ResourceToPrepare struct {
 // NewDesiredStateOfWorld returns a new instance of DesiredStateOfWorld.
 func NewDesiredStateOfWorld() DesiredStateOfWorld {
 	return &desiredStateOfWorld{
-		resourcesToPrepare: make(map[cditypes.UniqueResourceName]resourceToPrepare),
-		podErrors:          make(map[cditypes.UniquePodName]sets.String),
+		resourcesToPrepare: make(map[UniqueResourceName]resourceToPrepare),
+		podErrors:          make(map[UniquePodName]sets.String),
 	}
 }
 
@@ -66,9 +65,9 @@ type desiredStateOfWorld struct {
 	// attached to this node and mounted to the pods referencing it. The key in
 	// the map is the name of the volume and the value is a volume object
 	// containing more information about the volume.
-	resourcesToPrepare map[cditypes.UniqueResourceName]resourceToPrepare
+	resourcesToPrepare map[UniqueResourceName]resourceToPrepare
 	// podErrors are errors caught by desiredStateOfWorldPopulator about volumes for a given pod.
-	podErrors map[cditypes.UniquePodName]sets.String
+	podErrors map[UniquePodName]sets.String
 
 	sync.RWMutex
 }
@@ -77,13 +76,13 @@ type desiredStateOfWorld struct {
 // and mounted to podsToMount.
 type resourceToPrepare struct {
 	// resourceName contains the unique identifier for this resource.
-	resourceName cditypes.UniqueResourceName
+	resourceName UniqueResourceName
 
 	// podsToAttach is a map containing the set of pods that reference this
 	// resource and should attach it. The key in the map is
 	// the name of the pod and the value is a pod object containing more
 	// information about the pod.
-	podsToAttach map[cditypes.UniquePodName]podToAttach
+	podsToAttach map[UniquePodName]podToAttach
 
 	// volumeGidValue contains the value of the GID annotation, if present.
 	resourceID string
@@ -124,7 +123,7 @@ const (
 )
 
 func (dsw *desiredStateOfWorld) PodExistsInResource(
-	podName cditypes.UniquePodName, resourceName cditypes.UniqueResourceName) bool {
+	podName UniquePodName, resourceName UniqueResourceName) bool {
 	dsw.RLock()
 	defer dsw.RUnlock()
 

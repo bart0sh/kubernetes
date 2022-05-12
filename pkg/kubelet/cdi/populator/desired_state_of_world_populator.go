@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
-	cditypes "k8s.io/kubernetes/pkg/apis/cdi"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
@@ -78,7 +77,7 @@ func NewDesiredStateOfWorldPopulator(
 		desiredStateOfWorld:       desiredStateOfWorld,
 		actualStateOfWorld:        actualStateOfWorld,
 		pods: processedPods{
-			processedPods: make(map[cditypes.UniquePodName]bool)},
+			processedPods: make(map[cache.UniquePodName]bool)},
 		kubeContainerRuntime: kubeContainerRuntime,
 		hasAddedPods:         false,
 		hasAddedPodsLock:     sync.RWMutex{},
@@ -101,7 +100,7 @@ type desiredStateOfWorldPopulator struct {
 }
 
 type processedPods struct {
-	processedPods map[cditypes.UniquePodName]bool
+	processedPods map[cache.UniquePodName]bool
 	sync.RWMutex
 }
 
@@ -127,11 +126,11 @@ func (dswp *desiredStateOfWorldPopulator) populatorLoop() {
 // exist but should
 func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods() {
 	// Map unique pod name to outer resource name to PreparedResource.
-	preparedResourcesForPod := make(map[cditypes.UniquePodName]map[cditypes.UniqueResourceName]cache.PreparedResource)
+	preparedResourcesForPod := make(map[cache.UniquePodName]map[cache.UniqueResourceName]cache.PreparedResource)
 	for _, preparedResource := range dswp.actualStateOfWorld.GetAllPreparedResources() {
 		preparedResources, exist := preparedResourcesForPod[preparedResource.PodName]
 		if !exist {
-			preparedResources = make(map[cditypes.UniqueResourceName]cache.PreparedResource)
+			preparedResources = make(map[cache.UniqueResourceName]cache.PreparedResource)
 			preparedResourcesForPod[preparedResource.PodName] = preparedResources
 		}
 		preparedResources[preparedResource.ResourceName] = preparedResource
@@ -151,7 +150,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods() {
 // been processed/reprocessed by the populator. Otherwise, the resources for this pod need to
 // be reprocessed.
 func (dswp *desiredStateOfWorldPopulator) podPreviouslyProcessed(
-	podName cditypes.UniquePodName) bool {
+	podName cache.UniquePodName) bool {
 	dswp.pods.RLock()
 	defer dswp.pods.RUnlock()
 
@@ -159,15 +158,15 @@ func (dswp *desiredStateOfWorldPopulator) podPreviouslyProcessed(
 }
 
 // GetUniquePodName returns a unique identifier to reference a pod by
-func GetUniquePodName(pod *v1.Pod) cditypes.UniquePodName {
-	return cditypes.UniquePodName(pod.UID)
+func GetUniquePodName(pod *v1.Pod) cache.UniquePodName {
+	return cache.UniquePodName(pod.UID)
 }
 
 // processPodResources processes the resources in the given pod and adds them to the
 // desired state of the world.
 func (dswp *desiredStateOfWorldPopulator) processPodResources(
 	pod *v1.Pod,
-	preparedResourcesForPod map[cditypes.UniquePodName]map[cditypes.UniqueResourceName]cache.PreparedResource) {
+	preparedResourcesForPod map[cache.UniquePodName]map[cache.UniqueResourceName]cache.PreparedResource) {
 	if pod == nil {
 		return
 	}

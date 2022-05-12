@@ -24,16 +24,24 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/types"
-	cditypes "k8s.io/kubernetes/pkg/apis/cdi"
 	"k8s.io/kubernetes/pkg/apis/core"
 )
 
+// UniqueResourceName defines the type to key pods off of
+type UniqueResourceName types.UID
+
+// UniquePodName defines the type to key pods off of
+type UniquePodName types.UID
+
+// ResourcePreparationState represents resource preparation state
+type ResourcePreparationState string
+
 const (
 	// ResourcePrepared means that resource has been prepare for pod usage
-	ResourcePrepared cditypes.ResourcePreparationState = "ResourcePrepared"
+	ResourcePrepared ResourcePreparationState = "ResourcePrepared"
 
 	// ResourceNotPrepared means that resource has not been prepared
-	ResourceNotPrepared cditypes.ResourcePreparationState = "ResourceNotPrepared"
+	ResourceNotPrepared ResourcePreparationState = "ResourceNotPrepared"
 )
 
 // ActualStateOfWorld defines a set of thread-safe operations for the kubelet
@@ -48,15 +56,15 @@ type ActualStateOfWorld interface {
 
 // PreparedResource represents a resource that has successfully been given to a pod.
 type PreparedResource struct {
-	PodName      cditypes.UniquePodName
-	ResourceName cditypes.UniqueResourceName
+	PodName      UniquePodName
+	ResourceName UniqueResourceName
 }
 
 // NewActualStateOfWorld returns a new instance of ActualStateOfWorld.
 func NewActualStateOfWorld(nodeName types.NodeName) ActualStateOfWorld {
 	return &actualStateOfWorld{
 		nodeName:          nodeName,
-		preparedResources: make(map[cditypes.UniqueResourceName]preparedResource),
+		preparedResources: make(map[UniqueResourceName]preparedResource),
 	}
 }
 
@@ -68,7 +76,7 @@ type actualStateOfWorld struct {
 	// manager believes to be successfully prepared.
 	// The key in this map is the name of the resource and the value is an object
 	// containing more information about the prepared resource.
-	preparedResources map[cditypes.UniqueResourceName]preparedResource
+	preparedResources map[UniqueResourceName]preparedResource
 
 	sync.RWMutex
 }
@@ -77,13 +85,13 @@ type actualStateOfWorld struct {
 // successfully prepared.
 type preparedResource struct {
 	// resourceName contains the unique identifier for this resource.
-	resourceName cditypes.UniqueResourceName
+	resourceName UniqueResourceName
 
 	// pods is a map containing the set of pods that this volume has been
 	// successfully mounted to. The key in this map is the name of the pod and
 	// the value is a mountedPod object containing more information about the
 	// pod.
-	attachedPods map[cditypes.UniquePodName]attachedPod
+	attachedPods map[UniquePodName]attachedPod
 
 	// resourceClaim is a claim for this resource
 	resourceClaim core.PodResourceClaim
@@ -97,7 +105,7 @@ type preparedResource struct {
 // believes the underlying resource has been successfully attached.
 type attachedPod struct {
 	// the name of the pod
-	podName cditypes.UniquePodName
+	podName UniquePodName
 
 	// the UID of the pod
 	podUID types.UID
@@ -111,7 +119,7 @@ type attachedPod struct {
 	// resourceStateForPod stores state of resource preparation for the pod. if it is:
 	//   - ResourcePrepared: means resource for pod has been successfully prepared
 	//   - ResourceUnprepared: means resource for pod is not prepared, but it must be prepared
-	resourceStateForPod cditypes.ResourcePreparationState
+	resourceStateForPod ResourcePreparationState
 }
 
 // GetAllPreparedResources returns resources which could be prepared for a pod.

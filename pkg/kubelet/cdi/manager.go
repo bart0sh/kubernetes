@@ -27,10 +27,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
+	"k8s.io/kubernetes/pkg/kubelet/cdi/populator"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/reconciler"
 	"k8s.io/kubernetes/pkg/kubelet/config"
+	"k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/pod"
 )
 
@@ -49,6 +52,16 @@ const (
 	// podPrepareResourceTimeout is the amount of time the GetResourcesForPod
 	// call waits before retrying
 	podPrepareResourceRetryInterval = 300 * time.Millisecond
+
+	// desiredStateOfWorldPopulatorLoopSleepPeriod is the amount of time the
+	// DesiredStateOfWorldPopulator loop waits between successive executions
+	desiredStateOfWorldPopulatorLoopSleepPeriod = 100 * time.Millisecond
+
+	// desiredStateOfWorldPopulatorGetPodStatusRetryDuration is the amount of
+	// time the DesiredStateOfWorldPopulator loop waits between successive pod
+	// cleanup calls (to prevent calling containerruntime.GetPodStatus too
+	// frequently).
+	desiredStateOfWorldPopulatorGetPodStatusRetryDuration = 2 * time.Second
 )
 
 // ResourceManager runs a set of asynchronous loops that figure out which resources
@@ -85,17 +98,45 @@ type resourceManager struct {
 	// The data structure is populated upon successful completion of
 	// prepare and unprepare actions triggered by the reconciler.
 	actualStateOfWorld cache.ActualStateOfWorld
+
+	// desiredStateOfWorldPopulator runs an asynchronous periodic loop to
+	// populate the desiredStateOfWorld using the kubelet PodManager.
+	desiredStateOfWorldPopulator populator.DesiredStateOfWorldPopulator
+}
+
+// podStateProvider can determine if a pod is is going to be terminated
+type podStateProvider interface {
+	ShouldPodContainersBeTerminating(k8stypes.UID) bool
+	ShouldPodRuntimeBeRemoved(k8stypes.UID) bool
 }
 
 // NewResourceManager returns a new concrete instance implementing the
 // ResourceManager interface.
-func NewResourceManager(nodeName k8stypes.NodeName, podManager pod.Manager) ResourceManager {
-	return &resourceManager{
+func NewResourceManager(
+	nodeName k8stypes.NodeName,
+	podManager pod.Manager,
+	podStateProvider podStateProvider,
+	kubeClient clientset.Interface,
+	kubeContainerRuntime container.Runtime) ResourceManager {
+
+	rm := &resourceManager{
 		desiredStateOfWorld: cache.NewDesiredStateOfWorld(), // TODO: add parameter resourcePluginManager
 		actualStateOfWorld:  cache.NewActualStateOfWorld(nodeName),
 		reconciler: reconciler.NewReconciler(nodeName, cache.NewDesiredStateOfWorld(),
 			cache.NewActualStateOfWorld(nodeName)),
 	}
+
+	rm.desiredStateOfWorldPopulator = populator.NewDesiredStateOfWorldPopulator(
+		kubeClient,
+		desiredStateOfWorldPopulatorLoopSleepPeriod,
+		desiredStateOfWorldPopulatorGetPodStatusRetryDuration,
+		podManager,
+		podStateProvider,
+		rm.desiredStateOfWorld,
+		rm.actualStateOfWorld,
+		kubeContainerRuntime)
+
+	return rm
 }
 
 func (rm *resourceManager) Run(sourcesReady config.SourcesReady, stopCh <-chan struct{}) {
@@ -137,10 +178,7 @@ func (rm *resourceManager) WaitForPreparedResources(pod *v1.Pod) error {
 	klog.V(3).InfoS("Waiting for resources to be prepared for pod %s %s", pod.Name, pod.Status.Phase)
 	uniquePodName := GetUniquePodName(pod)
 
-	// Some pods expect to have Setup called over and over again to update.
-	// Remount plugins for which this is true. (Atomically updating volumes,
-	// like Downward API, depend on this to update the contents of the volume).
-	//vm.desiredStateOfWorldPopulator.ReprocessPod(uniquePodName)
+	rm.desiredStateOfWorldPopulator.ReprocessPod(uniquePodName)
 
 	err := wait.PollImmediate(
 		podPrepareResourceRetryInterval,

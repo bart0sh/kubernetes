@@ -42,6 +42,11 @@ import (
 // world cache still exist, if not, it removes them.
 type DesiredStateOfWorldPopulator interface {
 	Run(sourcesReady config.SourcesReady, stopCh <-chan struct{})
+
+	// ReprocessPod sets value for the specified pod in processedPods
+	// to false, forcing it to be reprocessed. This is required to enable
+	// re-preparing resources on pod updates
+	ReprocessPod(podName cache.UniquePodName)
 }
 
 // podStateProvider can determine if a pod is going to be terminated.
@@ -180,4 +185,17 @@ func (dswp *desiredStateOfWorldPopulator) processPodResources(
 	for _, podResourceClaim := range pod.Spec.ResourceClaims {
 		klog.V(4).Infof("Processing resource claim %s", podResourceClaim.Name)
 	}
+}
+
+func (dswp *desiredStateOfWorldPopulator) ReprocessPod(
+	podName cache.UniquePodName) {
+	dswp.markPodProcessingFailed(podName)
+}
+
+// markPodProcessingFailed marks the specified pod from processedPods as false to indicate that it failed processing
+func (dswp *desiredStateOfWorldPopulator) markPodProcessingFailed(
+	podName cache.UniquePodName) {
+	dswp.pods.Lock()
+	dswp.pods.processedPods[podName] = false
+	dswp.pods.Unlock()
 }

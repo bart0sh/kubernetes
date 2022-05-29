@@ -52,6 +52,11 @@ const (
 type ActualStateOfWorld interface {
 	// GetAllPreparedResources returns list of all prepared resources
 	GetAllPreparedResources() []PreparedResource
+
+	// GetPreparedResourcesForPod generates and returns a list of resources that are
+	// successfully prepared for the specified pod based on the current actual state
+	// of the world.
+	GetPreparedResourcesForPod(podName UniquePodName) []PreparedResource
 }
 
 // PreparedResource represents a resource that has successfully been given to a pod.
@@ -145,4 +150,23 @@ func (asw *actualStateOfWorld) GetAllPreparedResources() []PreparedResource {
 func getPreparedResource(
 	attachedPod *attachedPod, preparedResource *preparedResource) PreparedResource {
 	return PreparedResource{}
+}
+
+// getPreparedResourcesForPod returns list of prepared resources
+// that are attached to the given pod
+func (asw *actualStateOfWorld) GetPreparedResourcesForPod(podName UniquePodName) []PreparedResource {
+	asw.RLock()
+	defer asw.RUnlock()
+	preparedResources := []PreparedResource{}
+	for _, resource := range asw.preparedResources {
+		for preparedPodName, pod := range resource.attachedPods {
+			if preparedPodName == podName {
+				preparedResources = append(
+					preparedResources,
+					getPreparedResource(&pod, &resource))
+			}
+		}
+	}
+
+	return preparedResources
 }

@@ -31,21 +31,21 @@ import (
 )
 
 // DesiredStateOfWorld defines a set of thread-safe operations for the kubelet
-// volume manager's desired state of the world cache.
-// This cache contains volumes->pods i.e. a set of all volumes that should be
-// attached to this node and the pods that reference them and should mount the
-// volume.
-// Note: This is distinct from the DesiredStateOfWorld implemented by the
-// attach/detach controller. They both keep track of different objects. This
-// contains kubelet volume manager specific state.
+// resource manager's desired state of the world cache.
+// This cache contains resources->pods i.e. a set of all resources that should be
+// prepared on this node and the pods that reference them.
 type DesiredStateOfWorld interface {
-	// PodExistsInVolume returns true if the given pod exists in the list of
-	// podsToMount for the given volume in the cache.
+	// PodExistsInResource returns true if the given pod exists in the list of
+	// podsToPrepare for the given resource in the cache.
 	// If a pod with the same unique name does not exist under the specified
-	// volume, false is returned.
-	// If a volume with the name volumeName does not exist in the list of
-	// attached volumes, false is returned.
+	// resource, false is returned.
+	// If a resource with the name resourceName does not exist in the list of
+	// prepared resources, false is returned.
 	PodExistsInResource(podName UniquePodName, resourceName UniqueResourceName) bool
+
+	// PopPodErrors returns accumulated errors on a given pod and clears
+	// them.
+	PopPodErrors(podName UniquePodName) []string
 }
 
 // ResourceToPrepare represents a resource that needs to be prepared for PodName
@@ -61,12 +61,12 @@ func NewDesiredStateOfWorld() DesiredStateOfWorld {
 }
 
 type desiredStateOfWorld struct {
-	// volumesToMount is a map containing the set of volumes that should be
-	// attached to this node and mounted to the pods referencing it. The key in
-	// the map is the name of the volume and the value is a volume object
-	// containing more information about the volume.
+	// resourcesToPrepare is a map containing the set of resources that should be
+	// prepared on this node. The key in the map is the name of the resource and
+	// the value is a resource object containing more information about the resource.
 	resourcesToPrepare map[UniqueResourceName]resourceToPrepare
-	// podErrors are errors caught by desiredStateOfWorldPopulator about volumes for a given pod.
+
+	// podErrors are errors caught by desiredStateOfWorldPopulator about resources for a given pod.
 	podErrors map[UniquePodName]sets.String
 
 	sync.RWMutex
@@ -134,4 +134,15 @@ func (dsw *desiredStateOfWorld) PodExistsInResource(
 
 	_, podExists := resourceObj.podsToAttach[podName]
 	return podExists
+}
+
+func (dsw *desiredStateOfWorld) PopPodErrors(podName UniquePodName) []string {
+	dsw.Lock()
+	defer dsw.Unlock()
+
+	if errs, found := dsw.podErrors[podName]; found {
+		delete(dsw.podErrors, podName)
+		return errs.List()
+	}
+	return []string{}
 }

@@ -19,11 +19,13 @@ package cdi
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
@@ -69,12 +71,28 @@ type resourceManager struct {
 	// desiredStateOfWorld with the actualStateOfWorld by triggering attach,
 	// detach, mount, and unmount operations using the operationExecutor.
 	reconciler reconciler.Reconciler
+
+	// desiredStateOfWorld is a data structure containing the desired state of
+	// the world according to the resource manager: i.e. which resources should
+	// be prepared and which pods are referencing the resources).
+	// The data structure is populated by the desired state of the world
+	// populator using the kubelet pod manager.
+	desiredStateOfWorld cache.DesiredStateOfWorld
+
+	// actualStateOfWorld is a data structure containing the actual state of
+	// the world according to the manager: i.e. which resources are prepared
+	// on this node and which pods use the resources.
+	// The data structure is populated upon successful completion of
+	// prepare and unprepare actions triggered by the reconciler.
+	actualStateOfWorld cache.ActualStateOfWorld
 }
 
 // NewResourceManager returns a new concrete instance implementing the
 // ResourceManager interface.
 func NewResourceManager(nodeName k8stypes.NodeName, podManager pod.Manager) ResourceManager {
 	return &resourceManager{
+		desiredStateOfWorld: cache.NewDesiredStateOfWorld(), // TODO: add parameter resourcePluginManager
+		actualStateOfWorld:  cache.NewActualStateOfWorld(nodeName),
 		reconciler: reconciler.NewReconciler(nodeName, cache.NewDesiredStateOfWorld(),
 			cache.NewActualStateOfWorld(nodeName)),
 	}
@@ -94,12 +112,10 @@ func (rm *resourceManager) Run(sourcesReady config.SourcesReady, stopCh <-chan s
 // resources are prepared.
 func (rm *resourceManager) verifyResourcesPreparedFunc(podName cache.UniquePodName, expectedResources []string) wait.ConditionFunc {
 	return func() (done bool, err error) {
-		//return true, nil
-		return false, errors.New("fake preparation error")
-		/*if errs := rm.desiredStateOfWorld.PopPodErrors(podName); len(errs) > 0 {
+		if errs := rm.desiredStateOfWorld.PopPodErrors(podName); len(errs) > 0 {
 			return true, errors.New(strings.Join(errs, "; "))
 		}
-		return len(rm.getUnpreparedResources(podName, expectedResources)) == 0, nil*/
+		return len(rm.getUnpreparedResources(podName, expectedResources)) == 0, nil
 	}
 }
 
@@ -132,7 +148,7 @@ func (rm *resourceManager) WaitForPreparedResources(pod *v1.Pod) error {
 		rm.verifyResourcesPreparedFunc(uniquePodName, expectedResources))
 
 	if err != nil {
-		/*unpreparedResources :=
+		unpreparedResources :=
 			rm.getUnpreparedResources(uniquePodName, expectedResources)
 
 		if len(unpreparedResources) == 0 {
@@ -142,8 +158,7 @@ func (rm *resourceManager) WaitForPreparedResources(pod *v1.Pod) error {
 		return fmt.Errorf(
 			"unprepared resources=%v: %s",
 			unpreparedResources,
-			err)*/
-		return fmt.Errorf("resource preparation failed")
+			err)
 	}
 
 	klog.V(3).InfoS("All resources are prepared for pod %s %s", pod.Name, pod.Status.Phase)
@@ -158,7 +173,36 @@ func GetUniquePodName(pod *v1.Pod) cache.UniquePodName {
 // getExpectedResources returns a list of resources that must be prepared in order to
 // consider the resources setup step for this pod satisfied.
 func getExpectedResources(pod *v1.Pod) []string {
-	//mounts, devices := GetPodResourceNames(pod)
-	//return mounts.Union(devices).UnsortedList()
-	return []string{"fake resource"}
+	resources := []string{}
+
+	for _, resourceClaim := range pod.Spec.ResourceClaims {
+		resources = append(resources, resourceClaim.Name)
+	}
+
+	klog.V(3).InfoS("expected resources for pod %s: %s", pod.Name, strings.Join(resources, ", "))
+
+	return resources
+}
+
+// getUnpreparedResources fetches the current list of prepared resources
+// from the actual state of the world, and uses it to process the list of
+// expectedResources. It returns a list of unprepared resources.
+func (rm *resourceManager) getUnpreparedResources(podName cache.UniquePodName, expectedResources []string) []string {
+	preparedResources := sets.NewString()
+	for _, preparedResource := range rm.actualStateOfWorld.GetPreparedResourcesForPod(podName) {
+		preparedResources.Insert(string(preparedResource.ResourceName))
+	}
+	return filterUnpreparedResources(preparedResources, expectedResources)
+}
+
+// filterUnpreparedResources adds each element of expectedResources that is not in
+// preparedResources to a list of unpreparedResources and returns it.
+func filterUnpreparedResources(preparedResources sets.String, expectedResources []string) []string {
+	unpreparedResources := []string{}
+	for _, expectedResource := range expectedResources {
+		if !preparedResources.Has(expectedResource) {
+			unpreparedResources = append(unpreparedResources, expectedResource)
+		}
+	}
+	return unpreparedResources
 }

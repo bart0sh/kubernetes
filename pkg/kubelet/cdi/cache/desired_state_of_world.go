@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 /*
-Package cache implements data structures used by the kubelet volume manager to
-keep track of attached volumes and the pods that mounted them.
+Package cache implements data structures used by the kubelet resource manager to
+keep track of prepared resources and the pods that use them.
 */
 package cache
 
@@ -95,8 +95,8 @@ type desiredStateOfWorld struct {
 	sync.RWMutex
 }
 
-// The volume object represents a volume that should be attached to this node,
-// and mounted to podsToMount.
+// The resourceToPrepare object represents a resource that should be prepared on this node,
+// and available for usage to podsToAttach.
 type resourceToPrepare struct {
 	// resourceName contains the unique identifier for this resource.
 	resourceName UniqueResourceName
@@ -107,18 +107,18 @@ type resourceToPrepare struct {
 	// information about the pod.
 	podsToAttach map[UniquePodName]podToAttach
 
-	// reportedInUse indicates that the volume was successfully added to the
-	// VolumesInUse field in the node's status.
+	// reportedInUse indicates that the resource was successfully added to the
+	// ResourceInUse field in the node's status.
 	reportedInUse bool
 }
 
-// The pod object represents a pod that references the underlying volume and
-// should mount it once it is attached.
+// The pod object represents a pod that references the underlying resource and
+// should prepare it.
 type podToAttach struct {
 	// podName contains the name of this pod.
 	podName UniquePodName
 
-	// Pod to mount the volume to. Used to create NewMounter.
+	// Pod to use the resource.
 	pod *v1.Pod
 
 	// resource spec containing the specification for this resource.

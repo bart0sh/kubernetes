@@ -104,11 +104,10 @@ func (rc *reconciler) prepareResources() {
 	//klog.InfoS("Reconciler: prepare resources")
 }
 
-// sync process tries to observe the real world by scanning all pods' volume directories from the disk.
+// sync process tries to observe the real world by scanning all pods' resources.
 // If the actual and desired state of worlds are not consistent with the observed world, it means that some
-// mounted volumes are left out probably during kubelet restart. This process will reconstruct
-// the volumes and update the actual and desired states. For the volumes that cannot support reconstruction,
-// it will try to clean up the mount paths with operation executor.
+// prepared resources are left out probably during kubelet restart. This process will reconstruct
+// the resources and update the actual and desired states.
 func (rc *reconciler) sync() {
 	defer rc.updateLastSyncTime()
 	rc.syncStates()

@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 /*
-Package cache implements data structures used by the kubelet volume manager to
-keep track of attached volumes and the pods that mounted them.
+Package cache implements data structures used by the kubelet resource manager to
+keep track of prepared resources and the pods that use them.
 */
 package cache
 
@@ -95,9 +95,9 @@ type preparedResource struct {
 	// resourceName contains the unique identifier for this resource.
 	resourceName UniqueResourceName
 
-	// pods is a map containing the set of pods that this volume has been
-	// successfully mounted to. The key in this map is the name of the pod and
-	// the value is a mountedPod object containing more information about the
+	// pods is a map containing the set of pods that this resource has been
+	// successfully used by. The key in this map is the name of the pod and
+	// the value is a attachedPod object containing more information about the
 	// pod.
 	attachedPods map[UniquePodName]attachedPod
 

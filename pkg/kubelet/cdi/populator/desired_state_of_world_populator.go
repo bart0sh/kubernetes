@@ -146,7 +146,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods() {
 
 	for _, pod := range dswp.podManager.GetPods() {
 		if dswp.podStateProvider.ShouldPodContainersBeTerminating(pod.UID) {
-			// Do not (re)add volumes for pods that can't also be starting containers
+			// Do not (re)add resources for pods that can't also be starting containers
 			continue
 		}
 		klog.V(4).Infof("findAndAddNewPods: pod: %+v, resources: %+v", pod, preparedResourcesForPod)
@@ -154,7 +154,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods() {
 	}
 }
 
-// podPreviouslyProcessed returns true if the volumes for this pod have already
+// podPreviouslyProcessed returns true if the resources for this pod have already
 // been processed/reprocessed by the populator. Otherwise, the resources for this pod need to
 // be reprocessed.
 func (dswp *desiredStateOfWorldPopulator) podPreviouslyProcessed(
@@ -246,12 +246,12 @@ func (dswp *desiredStateOfWorldPopulator) processPodResources(
 	// some of the resource additions may have failed, should not mark this pod as fully processed
 	if allResourcesAdded {
 		dswp.markPodProcessed(uniquePodName)
-		// Remove any stored errors for the pod, everything went well in this processPodVolumes
+		// Remove any stored errors for the pod, everything went well in this processPodResources
 		dswp.desiredStateOfWorld.PopPodErrors(uniquePodName)
 	} else if dswp.podHasBeenSeenOnce(uniquePodName) {
-		// For the Pod which has been processed at least once, even though some volumes
+		// For the Pod which has been processed at least once, even though some resources
 		// may not have been reprocessed successfully this round, we still mark it as processed to avoid
-		// processing it at a very high frequency. The pod will be reprocessed when volume manager calls
+		// processing it at a very high frequency. The pod will be reprocessed when resource manager calls
 		// ReprocessPod() which is triggered by SyncPod.
 		dswp.markPodProcessed(uniquePodName)
 	}

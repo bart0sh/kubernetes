@@ -24,7 +24,6 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/kubernetes/pkg/apis/core"
 )
 
 // UniqueResourceName defines the type to key pods off of
@@ -57,6 +56,10 @@ type ActualStateOfWorld interface {
 	// successfully prepared for the specified pod based on the current actual state
 	// of the world.
 	GetPreparedResourcesForPod(podName UniquePodName) []PreparedResource
+
+	// SyncResource checks the resource.claimName in asw and
+	// the one populated from dsw , if they do not match, update this field from the value from dsw.
+	SyncResource(resourceName UniqueResourceName, podName UniquePodName, claimUUID types.UID)
 }
 
 // PreparedResource represents a resource that has successfully been given to a pod.
@@ -99,7 +102,7 @@ type preparedResource struct {
 	attachedPods map[UniquePodName]attachedPod
 
 	// resourceClaim is a claim for this resource
-	resourceClaim core.PodResourceClaim
+	// resourceClaim core.PodResourceClaim
 
 	// pluginName is the Unescaped Qualified name of the resource plugin used to
 	// prepare this resource.
@@ -115,11 +118,11 @@ type attachedPod struct {
 	// the UID of the pod
 	podUID types.UID
 
-	// resource claims for all resources used by the pod
-	resourceClaims []core.PodResourceClaim
+	// resource name
+	resourceName UniqueResourceName
 
-	// resourceID contains the value of the resource identifier
-	resourceID string
+	// resourceClaim UUID
+	claimUUID types.UID
 
 	// resourceStateForPod stores state of resource preparation for the pod. if it is:
 	//   - ResourcePrepared: means resource for pod has been successfully prepared
@@ -169,4 +172,17 @@ func (asw *actualStateOfWorld) GetPreparedResourcesForPod(podName UniquePodName)
 	}
 
 	return preparedResources
+}
+
+func (asw *actualStateOfWorld) SyncResource(resourceName UniqueResourceName, podName UniquePodName, resourceClaimUUID types.UID) {
+	asw.Lock()
+	defer asw.Unlock()
+	if resourceObj, resourceExists := asw.preparedResources[resourceName]; resourceExists {
+		if podObj, podExists := resourceObj.attachedPods[podName]; podExists {
+			if podObj.claimUUID != resourceClaimUUID {
+				podObj.claimUUID = resourceClaimUUID
+				asw.preparedResources[resourceName].attachedPods[podName] = podObj
+			}
+		}
+	}
 }

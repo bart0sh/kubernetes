@@ -25,9 +25,8 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/kubernetes/pkg/volume"
-	"k8s.io/kubernetes/pkg/volume/util/types"
 )
 
 // DesiredStateOfWorld defines a set of thread-safe operations for the kubelet
@@ -43,13 +42,37 @@ type DesiredStateOfWorld interface {
 	// prepared resources, false is returned.
 	PodExistsInResource(podName UniquePodName, resourceName UniqueResourceName) bool
 
+	// AddPodToResource adds the given pod to the given resource in the cache
+	// indicating the specified pod should use the specified resource.
+	// A unique resourceName is generated from the resourceSpec and returned on
+	// success.
+	// If no resource plugin can support the given resourceSpec or more than one
+	// plugin can support it, an error is returned.
+	// If a pod with the same unique name already exists under the specified
+	// resource, this is a no-op.
+	AddPodToResource(podName UniquePodName, pod *v1.Pod, resourceSpec *ResourceSpec) error
+
 	// PopPodErrors returns accumulated errors on a given pod and clears
 	// them.
 	PopPodErrors(podName UniquePodName) []string
+
+	// AddErrorToPod adds the given error to the given pod in the cache.
+	// It will be returned by subsequent GetPodErrors().
+	// Each error string is stored only once.
+	AddErrorToPod(podName UniquePodName, err string)
 }
 
 // ResourceToPrepare represents a resource that needs to be prepared for PodName
 type ResourceToPrepare struct {
+}
+
+// ResourceSpec is an internal representation of a resource
+// It contains attributes that are required to prepare and unprepare the resource.
+type ResourceSpec struct {
+	Name                 UniqueResourceName
+	DriverName           string
+	ResourceClaimUUID    types.UID
+	AllocationAttributes map[string]string
 }
 
 // NewDesiredStateOfWorld returns a new instance of DesiredStateOfWorld.
@@ -84,9 +107,6 @@ type resourceToPrepare struct {
 	// information about the pod.
 	podsToAttach map[UniquePodName]podToAttach
 
-	// volumeGidValue contains the value of the GID annotation, if present.
-	resourceID string
-
 	// reportedInUse indicates that the volume was successfully added to the
 	// VolumesInUse field in the node's status.
 	reportedInUse bool
@@ -96,24 +116,16 @@ type resourceToPrepare struct {
 // should mount it once it is attached.
 type podToAttach struct {
 	// podName contains the name of this pod.
-	podName types.UniquePodName
+	podName UniquePodName
 
 	// Pod to mount the volume to. Used to create NewMounter.
 	pod *v1.Pod
 
-	// volume spec containing the specification for this volume. Used to
-	// generate the volume plugin object, and passed to plugin methods.
-	// For non-PVC volumes this is the same as defined in the pod object. For
-	// PVC volumes it is from the dereferenced PV object.
-	volumeSpec *volume.Spec
+	// resource spec containing the specification for this resource.
+	resourceSpec *ResourceSpec
 
-	// outerVolumeSpecName is the volume.Spec.Name() of the volume as referenced
-	// directly in the pod. If the volume was referenced through a persistent
-	// volume claim, this contains the volume.Spec.Name() of the persistent
-	// volume claim
-	outerVolumeSpecName string
-	// mountRequestTime stores time at which mount was requested
-	mountRequestTime time.Time
+	// prepareRequestTime stores time at which resource preparation was requested
+	prepareRequestTime time.Time
 }
 
 const (
@@ -145,4 +157,54 @@ func (dsw *desiredStateOfWorld) PopPodErrors(podName UniquePodName) []string {
 		return errs.List()
 	}
 	return []string{}
+}
+
+func (dsw *desiredStateOfWorld) AddErrorToPod(podName UniquePodName, err string) {
+	dsw.Lock()
+	defer dsw.Unlock()
+
+	if errs, found := dsw.podErrors[podName]; found {
+		if errs.Len() <= maxPodErrors {
+			errs.Insert(err)
+		}
+		return
+	}
+	dsw.podErrors[podName] = sets.NewString(err)
+}
+
+func (dsw *desiredStateOfWorld) AddPodToResource(
+	podName UniquePodName,
+	pod *v1.Pod,
+	resourceSpec *ResourceSpec) error {
+	dsw.Lock()
+	defer dsw.Unlock()
+
+	/*resourcePlugin, err := dsw.resourcePluginMgr.FindPluginByName(resourceSpec.DriverName)
+	if err != nil || resourcePlugin == nil {
+		return fmt.Errorf(
+			"failed to get Plugin for resource %s, err=%v",
+			resourceSpec.Name,
+			err)
+	}*/
+
+	resourceName := resourceSpec.Name
+
+	if _, resourceExists := dsw.resourcesToPrepare[resourceName]; !resourceExists {
+		dsw.resourcesToPrepare[resourceName] = resourceToPrepare{
+			resourceName:  resourceName,
+			podsToAttach:  make(map[UniquePodName]podToAttach),
+			reportedInUse: false,
+		}
+	}
+
+	// Create new podToPrepare object. If it already exists, it is refreshed with
+	// updated values (this is required for resources that require re-preparing on
+	// pod update, like Downward API resources).
+	dsw.resourcesToPrepare[resourceName].podsToAttach[podName] = podToAttach{
+		podName:            podName,
+		pod:                pod,
+		resourceSpec:       resourceSpec,
+		prepareRequestTime: time.Now(),
+	}
+	return nil
 }

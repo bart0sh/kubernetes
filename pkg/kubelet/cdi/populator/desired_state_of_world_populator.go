@@ -21,12 +21,15 @@ caches in sync with the "ground truth".
 package populator
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
@@ -167,6 +170,38 @@ func GetUniquePodName(pod *v1.Pod) cache.UniquePodName {
 	return cache.UniquePodName(pod.UID)
 }
 
+// createResourceSpec creates and returns a resourceSpec object for the
+// specified resource. It gets ResourceClass and AllocationResults objects
+// to obtain driver name and allocation attributes.
+// Returns an error if unable to obtain the resource at this time.
+func (dswp *desiredStateOfWorldPopulator) createResourceSpec(
+	podResourceClaim v1.PodResourceClaim, pod *v1.Pod) (*cache.ResourceSpec, error) {
+
+	claimName := *podResourceClaim.ResourceClaimName
+	resourceClaim, err := dswp.kubeClient.CdiV1alpha1().ResourceClaims(pod.Namespace).Get(context.TODO(), claimName, metav1.GetOptions{})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch ResourceClaim %s referenced by pod %s: %v", claimName, pod.Name, err)
+	}
+
+	driverName := resourceClaim.Status.DriverName
+
+	return &cache.ResourceSpec{
+		Name:                 GetUniqueResourceName(GetUniquePodName(pod), driverName, resourceClaim.GetUID()),
+		DriverName:           driverName,
+		ResourceClaimUUID:    resourceClaim.GetUID(),
+		AllocationAttributes: resourceClaim.Status.Allocation.Attributes}, nil
+}
+
+// GetUniqueResourceName returns a unique resource name with pod
+// name included. This is useful to generate different names for different pods
+// using the same resource.
+func GetUniqueResourceName(
+	podName cache.UniquePodName, pluginName string, resourceClaimUID types.UID) cache.UniqueResourceName {
+	return cache.UniqueResourceName(
+		fmt.Sprintf("%s/%v-%s", pluginName, podName, resourceClaimUID))
+}
+
 // processPodResources processes the resources in the given pod and adds them to the
 // desired state of the world.
 func (dswp *desiredStateOfWorldPopulator) processPodResources(
@@ -181,9 +216,44 @@ func (dswp *desiredStateOfWorldPopulator) processPodResources(
 		return
 	}
 
+	allResourcesAdded := true
+
 	// Process resources for each resource claim defined in pod
 	for _, podResourceClaim := range pod.Spec.ResourceClaims {
 		klog.V(4).Infof("Processing resource claim %s", podResourceClaim.Name)
+
+		resourceSpec, err := dswp.createResourceSpec(podResourceClaim, pod)
+		if err != nil {
+			klog.ErrorS(err, "Error processing resource", "pod", klog.KObj(pod), "resourceName", podResourceClaim.Name)
+			dswp.desiredStateOfWorld.AddErrorToPod(uniquePodName, err.Error())
+			allResourcesAdded = false
+			continue
+		}
+
+		// Add resource to desired state of world
+		err = dswp.desiredStateOfWorld.AddPodToResource(uniquePodName, pod, resourceSpec)
+		if err != nil {
+			klog.ErrorS(err, "Failed to add resource to desiredStateOfWorld", "pod", klog.KObj(pod), "resourceName", resourceSpec.Name)
+			dswp.desiredStateOfWorld.AddErrorToPod(uniquePodName, err.Error())
+			allResourcesAdded = false
+		} else {
+			klog.V(4).InfoS("Added resource to desired state", "pod", klog.KObj(pod), "resourceName", resourceSpec.Name)
+		}
+		// sync resource
+		dswp.actualStateOfWorld.SyncResource(resourceSpec.Name, uniquePodName, resourceSpec.ResourceClaimUUID)
+	}
+
+	// some of the resource additions may have failed, should not mark this pod as fully processed
+	if allResourcesAdded {
+		dswp.markPodProcessed(uniquePodName)
+		// Remove any stored errors for the pod, everything went well in this processPodVolumes
+		dswp.desiredStateOfWorld.PopPodErrors(uniquePodName)
+	} else if dswp.podHasBeenSeenOnce(uniquePodName) {
+		// For the Pod which has been processed at least once, even though some volumes
+		// may not have been reprocessed successfully this round, we still mark it as processed to avoid
+		// processing it at a very high frequency. The pod will be reprocessed when volume manager calls
+		// ReprocessPod() which is triggered by SyncPod.
+		dswp.markPodProcessed(uniquePodName)
 	}
 }
 
@@ -198,4 +268,23 @@ func (dswp *desiredStateOfWorldPopulator) markPodProcessingFailed(
 	dswp.pods.Lock()
 	dswp.pods.processedPods[podName] = false
 	dswp.pods.Unlock()
+}
+
+// markPodProcessed records that the resources for the specified pod have been
+// processed by the populator
+func (dswp *desiredStateOfWorldPopulator) markPodProcessed(podName cache.UniquePodName) {
+	dswp.pods.Lock()
+	defer dswp.pods.Unlock()
+
+	dswp.pods.processedPods[podName] = true
+}
+
+// podHasBeenSeenOnce returns true if the pod has been seen by the popoulator
+// at least once.
+func (dswp *desiredStateOfWorldPopulator) podHasBeenSeenOnce(
+	podName cache.UniquePodName) bool {
+	dswp.pods.RLock()
+	_, exist := dswp.pods.processedPods[podName]
+	dswp.pods.RUnlock()
+	return exist
 }

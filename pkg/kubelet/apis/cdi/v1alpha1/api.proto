@@ -35,38 +35,45 @@ service Node {
 
   rpc NodeUnprepareResource (NodeUnprepareResourceRequest)
     returns (NodeUnprepareResourceResponse) {}
-
-  rpc NodeGetInfo (NodeGetInfoRequest)
-    returns (NodeGetInfoResponse) {}
 }
 
 message NodePrepareResourceRequest {
-    // The ID of the resource to prepare. This field is REQUIRED.
-    string resource_id = 1;
+    // The ResourceClaim namespace (ResourceClaim.meta.Namespace).
+    // This field is REQUIRED.
+    string namespace = 1;
+    // The UID of the Resource claim (ResourceClaim.meta.UUID).
+    // This field is REQUIRED.
+    string claim_uid = 2;
+    // The name of the Resource claim (ResourceClaim.meta.Name)
+    // This field is REQUIRED.
+    string claim_name = 3;
+    // Allocation attributes (AllocationResult.Attributes)
+    // This field is REQUIRED.
+    map<string, string> attributes = 4;
 }
 
 message NodePrepareResourceResponse {
-    // Intentionally empty.
+    // These are the additional devices that kubelet must
+    // make available via the container runtime. A resource
+    // may have zero or more devices.
+    repeated string cdi_device = 1;
 }
 
 message NodeUnprepareResourceRequest {
-    // The ID of the resource to unprepare. This field is REQUIRED.
-    string resource_id = 1;
+    // The ResourceClaim namespace (ResourceClaim.meta.Namespace).
+    // This field is REQUIRED.
+    string namespace = 1;
+    // The UID of the Resource claim (ResourceClaim.meta.UUID).
+    // This field is REQUIRED.
+    string claim_uid = 2;
+    // The name of the Resource claim (ResourceClaim.meta.Name)
+    // This field is REQUIRED.
+    string claim_name = 3;
+    // List of fully qualified CDI device names
+    // Kubelet plugin returns them in the NodePrepareResourceResponse
+    repeated string cdi_device = 4;
 }
 
 message NodeUnprepareResourceResponse {
     // Intentionally empty.
-}
-
-message NodeGetInfoRequest {
-}
-
-message NodeGetInfoResponse {
-    // The identifier of the node as understood by the SP.
-    // This field is REQUIRED.
-    // This field MUST contain enough information to uniquely identify
-    // this specific node vs all other nodes supported by this plugin.
-    // The SP is NOT responsible for global uniqueness of node_id across
-    // multiple SPs.
-    string node_id = 1;
 }

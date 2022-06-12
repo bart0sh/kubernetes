@@ -17,7 +17,6 @@ limitations under the License.
 package cdi
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -59,23 +58,6 @@ func (h *RegistrationHandler) RegisterPlugin(pluginName string, endpoint string,
 		endpoint:                endpoint,
 		highestSupportedVersion: highestSupportedVersion,
 	})
-
-	// Get node info from the driver.
-	rp, err := newCDIPluginClient(cdiPluginName(pluginName))
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), resourceTimeout)
-	defer cancel()
-
-	_, err = rp.NodeGetInfo(ctx)
-	if err != nil {
-		if unregErr := unregisterPlugin(pluginName); unregErr != nil {
-			klog.Error(log("registrationHandler.RegisterPlugin failed to unregister plugin due to previous error: %v", unregErr))
-		}
-		return err
-	}
 
 	return nil
 }

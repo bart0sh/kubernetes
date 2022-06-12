@@ -31,19 +31,27 @@ import (
 	cdipbv1 "k8s.io/kubernetes/pkg/kubelet/apis/cdi/v1alpha1"
 )
 
-type cdiClient interface {
-	NodeGetInfo(ctx context.Context) (
-		nodeID string,
-		err error)
+// UniqueResourceName defines the type to key pods off of
+type UniqueResourceName types.UID
 
+// UniquePodName defines the type to key pods off of
+type UniquePodName types.UID
+
+type CDIClient interface {
 	NodePrepareResource(
 		ctx context.Context,
-		resourceId string,
+		namespace string,
+		claimUID types.UID,
+		claimName UniqueResourceName,
+		allocationAttributes map[string]string,
 	) error
 
 	NodeUnprepareResource(
 		ctx context.Context,
-		resourceId string,
+		namespace string,
+		claimUID types.UID,
+		claimName UniqueResourceName,
+		cdiDevice []string,
 	) error
 }
 
@@ -55,12 +63,12 @@ type cdiPluginName string
 
 // cdiPluginClient encapsulates all cdi plugin methods
 type cdiPluginClient struct {
-	pluginName          cdiPluginName
+	pluginName          string
 	addr                cdiAddr
 	nodeV1ClientCreator nodeV1ClientCreator
 }
 
-var _ cdiClient = &cdiPluginClient{}
+var _ CDIClient = &cdiPluginClient{}
 
 type nodeV1ClientCreator func(addr cdiAddr) (
 	nodeClient cdipbv1.NodeClient,
@@ -99,7 +107,7 @@ func newV1NodeClient(addr cdiAddr) (nodeClient cdipbv1.NodeClient, closer io.Clo
 	return nodeClient, conn, nil
 }
 
-func newCDIPluginClient(pluginName cdiPluginName) (*cdiPluginClient, error) {
+func NewCDIPluginClient(pluginName string) (CDIClient, error) {
 	if pluginName == "" {
 		return nil, fmt.Errorf("plugin name is empty")
 	}
@@ -117,45 +125,19 @@ func newCDIPluginClient(pluginName cdiPluginName) (*cdiPluginClient, error) {
 	}, nil
 }
 
-func (r *cdiPluginClient) NodeGetInfo(ctx context.Context) (
-	nodeID string,
-	err error) {
-	klog.V(4).InfoS(log("calling NodeGetInfo rpc"))
-
-	var getNodeInfoError error
-	nodeID, getNodeInfoError = r.nodeGetInfoV1(ctx)
-	if getNodeInfoError != nil {
-		klog.InfoS("Error calling CDI NodeGetInfo()", "err", getNodeInfoError.Error())
-	}
-	return nodeID, getNodeInfoError
-}
-
-func (r *cdiPluginClient) nodeGetInfoV1(ctx context.Context) (
-	nodeID string,
-	err error) {
-
-	nodeClient, closer, err := r.nodeV1ClientCreator(r.addr)
-	if err != nil {
-		return "", err
-	}
-	defer closer.Close()
-
-	res, err := nodeClient.NodeGetInfo(ctx, &cdipbv1.NodeGetInfoRequest{})
-	if err != nil {
-		return "", err
-	}
-
-	return res.GetNodeId(), nil
-}
-
 func (r *cdiPluginClient) NodePrepareResource(
 	ctx context.Context,
-	resourceId string,
+	namespace string,
+	claimUID types.UID,
+	claimName UniqueResourceName,
+	allocationAttributes map[string]string,
 ) error {
-	klog.V(4).InfoS(log("calling NodePrepareResource rpc"), "resourceId", resourceId)
-	if resourceId == "" {
-		return errors.New("missing resource id")
-	}
+	klog.V(4).InfoS(
+		log("calling NodePrepareResource rpc"),
+		"namespace", namespace,
+		"claim UID", claimUID,
+		"claim name", claimName,
+		"allocation attributes", allocationAttributes)
 
 	if r.nodeV1ClientCreator == nil {
 		return errors.New("failed to call NodePrepareResource. nodeV1ClientCreator is nil")
@@ -168,7 +150,10 @@ func (r *cdiPluginClient) NodePrepareResource(
 	defer closer.Close()
 
 	req := &cdipbv1.NodePrepareResourceRequest{
-		ResourceId: resourceId,
+		Namespace:  namespace,
+		ClaimUid:   string(claimUID),
+		ClaimName:  string(claimName),
+		Attributes: allocationAttributes,
 	}
 
 	_, err = nodeClient.NodePrepareResource(ctx, req)
@@ -178,11 +163,19 @@ func (r *cdiPluginClient) NodePrepareResource(
 	return err
 }
 
-func (r *cdiPluginClient) NodeUnprepareResource(ctx context.Context, resourceId string) error {
-	klog.V(4).InfoS(log("calling NodeUnprepareResource rpc"), "resourceID", resourceId)
-	if resourceId == "" {
-		return errors.New("missing resource id")
-	}
+func (r *cdiPluginClient) NodeUnprepareResource(
+	ctx context.Context,
+	namespace string,
+	claimUID types.UID,
+	claimName UniqueResourceName,
+	cdiDevices []string,
+) error {
+	klog.V(4).InfoS(
+		log("calling NodeUnprepareResource rpc"),
+		"namespace", namespace,
+		"claim UID", claimUID,
+		"claim name", claimName,
+		"cdi devices", cdiDevices)
 	if r.nodeV1ClientCreator == nil {
 		return errors.New("nodeV1ClientCreate is nil")
 	}
@@ -194,7 +187,10 @@ func (r *cdiPluginClient) NodeUnprepareResource(ctx context.Context, resourceId 
 	defer closer.Close()
 
 	req := &cdipbv1.NodeUnprepareResourceRequest{
-		ResourceId: resourceId,
+		Namespace: namespace,
+		ClaimUid:  string(claimUID),
+		ClaimName: string(claimName),
+		CdiDevice: cdiDevices,
 	}
 
 	_, err = nodeClient.NodeUnprepareResource(ctx, req)

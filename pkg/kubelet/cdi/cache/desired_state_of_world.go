@@ -205,21 +205,22 @@ func (dsw *desiredStateOfWorld) AddPodToResource(
 	dsw.Lock()
 	defer dsw.Unlock()
 
-	/*resourcePlugin, err := dsw.resourcePluginMgr.FindPluginByName(resourceSpec.DriverName)
-	if err != nil || resourcePlugin == nil {
+	resourcePluginClient, err := cdi.NewCDIPluginClient(resourceSpec.DriverName)
+	if err != nil || resourcePluginClient == nil {
 		return fmt.Errorf(
-			"failed to get Plugin for resource %s, err=%v",
-			resourceSpec.Name,
+			"failed to get CDI Plugin for driver name %s, err=%v",
+			resourceSpec.DriverName,
 			err)
-	}*/
+	}
 
 	resourceName := resourceSpec.Name
 
 	if _, resourceExists := dsw.resourcesToPrepare[resourceName]; !resourceExists {
 		dsw.resourcesToPrepare[resourceName] = resourceToPrepare{
-			resourceName:  resourceName,
-			podsToAttach:  make(map[cdi.UniquePodName]podToAttach),
-			reportedInUse: false,
+			resourceName:         resourceName,
+			podsToAttach:         make(map[cdi.UniquePodName]podToAttach),
+			reportedInUse:        false,
+			resourcePluginClient: resourcePluginClient,
 		}
 	}
 
@@ -233,4 +234,25 @@ func (dsw *desiredStateOfWorld) AddPodToResource(
 		prepareRequestTime: time.Now(),
 	}
 	return nil
+}
+
+func (dsw *desiredStateOfWorld) GetResourcesToPrepare() []ResourceToPrepare {
+	dsw.RLock()
+	defer dsw.RUnlock()
+
+	resourcesToPrepare := make([]ResourceToPrepare, 0 /* len */, len(dsw.resourcesToPrepare) /* cap */)
+	for resourceName, resourceObj := range dsw.resourcesToPrepare {
+		for podName, podObj := range resourceObj.podsToAttach {
+			rtp := ResourceToPrepare{
+				ResourceName:         resourceName,
+				ResourceSpec:         podObj.resourceSpec,
+				PodName:              podName,
+				Pod:                  podObj.pod,
+				ReportedInUse:        resourceObj.reportedInUse,
+				ResourcePluginClient: resourceObj.resourcePluginClient,
+			}
+			resourcesToPrepare = append(resourcesToPrepare, rtp)
+		}
+	}
+	return resourcesToPrepare
 }

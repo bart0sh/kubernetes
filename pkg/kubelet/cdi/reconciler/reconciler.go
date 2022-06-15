@@ -20,6 +20,7 @@ limitations under the License.
 package reconciler
 
 import (
+	"context"
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -46,21 +47,23 @@ type Reconciler interface {
 // NewReconciler returns a new instance of Reconciler.
 // nodeName - the Name for this node
 func NewReconciler(nodeName types.NodeName, desiredStateOfWorld cache.DesiredStateOfWorld,
-	actualStateOfWorld cache.ActualStateOfWorld) Reconciler {
+	actualStateOfWorld cache.ActualStateOfWorld, populatorHasAddedPods func() bool) Reconciler {
 	return &reconciler{
-		nodeName:            nodeName,
-		desiredStateOfWorld: desiredStateOfWorld,
-		actualStateOfWorld:  actualStateOfWorld,
-		timeOfLastSync:      time.Time{},
+		nodeName:              nodeName,
+		desiredStateOfWorld:   desiredStateOfWorld,
+		actualStateOfWorld:    actualStateOfWorld,
+		populatorHasAddedPods: populatorHasAddedPods,
+		timeOfLastSync:        time.Time{},
 	}
 }
 
 type reconciler struct {
-	nodeName            types.NodeName
-	actualStateOfWorld  cache.ActualStateOfWorld
-	desiredStateOfWorld cache.DesiredStateOfWorld
-	loopSleepDuration   time.Duration
-	timeOfLastSync      time.Time
+	nodeName              types.NodeName
+	actualStateOfWorld    cache.ActualStateOfWorld
+	desiredStateOfWorld   cache.DesiredStateOfWorld
+	populatorHasAddedPods func() bool
+	loopSleepDuration     time.Duration
+	timeOfLastSync        time.Time
 }
 
 func (rc *reconciler) Run(stopCh <-chan struct{}) {
@@ -71,7 +74,10 @@ func (rc *reconciler) reconciliationLoopFunc() func() {
 	return func() {
 		rc.reconcile()
 
-		if !rc.StatesHasBeenSynced() {
+		// Sync the state with the reality once after all existing pods are added to the desired state from all sources.
+		// Otherwise, the reconstruct process may clean up pods' resources that are still in use because
+		// desired state of world does not contain a complete list of pods.
+		if rc.populatorHasAddedPods() && !rc.StatesHasBeenSynced() {
 			klog.InfoS("Reconciler: start to sync state")
 			rc.sync()
 		}
@@ -101,7 +107,23 @@ func (rc *reconciler) unprepareResources() {
 
 func (rc *reconciler) prepareResources() {
 	// Ensure resources that should be prepared are prepared.
-	//klog.InfoS("Reconciler: prepare resources")
+	klog.InfoS("Reconciler: prepare resources")
+	for _, resourceToPrepare := range rc.desiredStateOfWorld.GetResourcesToPrepare() {
+		klog.V(4).InfoS("Starting operationExecutor.PrepareResource", "pod", klog.KObj(resourceToPrepare.Pod))
+
+		go func(resourceToPrepare cache.ResourceToPrepare) {
+			err := resourceToPrepare.ResourcePluginClient.NodePrepareResource(
+				context.Background(),
+				resourceToPrepare.Pod.Namespace,
+				resourceToPrepare.ResourceSpec.ResourceClaimUUID,
+				resourceToPrepare.ResourceSpec.Name,
+				resourceToPrepare.ResourceSpec.AllocationAttributes,
+			)
+			if err != nil {
+
+			}
+		}(resourceToPrepare)
+	}
 }
 
 // sync process tries to observe the real world by scanning all pods' resources.

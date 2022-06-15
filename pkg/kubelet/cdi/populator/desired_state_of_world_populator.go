@@ -51,6 +51,14 @@ type DesiredStateOfWorldPopulator interface {
 	// to false, forcing it to be reprocessed. This is required to enable
 	// re-preparing resources on pod updates
 	ReprocessPod(podName cdi.UniquePodName)
+
+	// HasAddedPods returns whether the populator has looped through the list
+	// of active pods and added them to the desired state of the world cache,
+	// at a time after sources are all ready, at least once. It does not
+	// return true before sources are all ready because before then, there is
+	// a chance many or all pods are missing from the list of active pods and
+	// so few to none will have been added.
+	HasAddedPods() bool
 }
 
 // podStateProvider can determine if a pod is going to be terminated.
@@ -288,4 +296,10 @@ func (dswp *desiredStateOfWorldPopulator) podHasBeenSeenOnce(
 	_, exist := dswp.pods.processedPods[podName]
 	dswp.pods.RUnlock()
 	return exist
+}
+
+func (dswp *desiredStateOfWorldPopulator) HasAddedPods() bool {
+	dswp.hasAddedPodsLock.RLock()
+	defer dswp.hasAddedPodsLock.RUnlock()
+	return dswp.hasAddedPods
 }

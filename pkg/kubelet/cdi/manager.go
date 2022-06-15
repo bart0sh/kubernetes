@@ -122,9 +122,7 @@ func NewResourceManager(
 
 	rm := &resourceManager{
 		desiredStateOfWorld: cache.NewDesiredStateOfWorld(), // TODO: add parameter resourcePluginManager
-		actualStateOfWorld:  cache.NewActualStateOfWorld(nodeName),
-		reconciler: reconciler.NewReconciler(nodeName, cache.NewDesiredStateOfWorld(),
-			cache.NewActualStateOfWorld(nodeName)),
+		actualStateOfWorld:  cache.NewActualStateOfWorld(),
 	}
 
 	rm.desiredStateOfWorldPopulator = populator.NewDesiredStateOfWorldPopulator(

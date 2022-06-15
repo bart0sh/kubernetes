@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	"k8s.io/kubernetes/pkg/cdi"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/populator"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/reconciler"
@@ -151,7 +152,7 @@ func (rm *resourceManager) Run(sourcesReady config.SourcesReady, stopCh <-chan s
 
 // verifyResourcesPreparedFunc returns a method that returns true when all expected
 // resources are prepared.
-func (rm *resourceManager) verifyResourcesPreparedFunc(podName cache.UniquePodName, expectedResources []string) wait.ConditionFunc {
+func (rm *resourceManager) verifyResourcesPreparedFunc(podName cdi.UniquePodName, expectedResources []string) wait.ConditionFunc {
 	return func() (done bool, err error) {
 		if errs := rm.desiredStateOfWorld.PopPodErrors(podName); len(errs) > 0 {
 			return true, errors.New(strings.Join(errs, "; "))
@@ -204,8 +205,8 @@ func (rm *resourceManager) WaitForPreparedResources(pod *v1.Pod) error {
 }
 
 // GetUniquePodName returns a unique identifier to reference a pod by
-func GetUniquePodName(pod *v1.Pod) cache.UniquePodName {
-	return cache.UniquePodName(pod.UID)
+func GetUniquePodName(pod *v1.Pod) cdi.UniquePodName {
+	return cdi.UniquePodName(pod.UID)
 }
 
 // getExpectedResources returns a list of resources that must be prepared in order to
@@ -225,7 +226,7 @@ func getExpectedResources(pod *v1.Pod) []string {
 // getUnpreparedResources fetches the current list of prepared resources
 // from the actual state of the world, and uses it to process the list of
 // expectedResources. It returns a list of unprepared resources.
-func (rm *resourceManager) getUnpreparedResources(podName cache.UniquePodName, expectedResources []string) []string {
+func (rm *resourceManager) getUnpreparedResources(podName cdi.UniquePodName, expectedResources []string) []string {
 	preparedResources := sets.NewString()
 	for _, preparedResource := range rm.actualStateOfWorld.GetPreparedResourcesForPod(podName) {
 		preparedResources.Insert(string(preparedResource.ResourceName))

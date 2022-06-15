@@ -24,13 +24,8 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/kubernetes/pkg/cdi"
 )
-
-// UniqueResourceName defines the type to key pods off of
-type UniqueResourceName types.UID
-
-// UniquePodName defines the type to key pods off of
-type UniquePodName types.UID
 
 // ResourcePreparationState represents resource preparation state
 type ResourcePreparationState string
@@ -55,36 +50,32 @@ type ActualStateOfWorld interface {
 	// GetPreparedResourcesForPod generates and returns a list of resources that are
 	// successfully prepared for the specified pod based on the current actual state
 	// of the world.
-	GetPreparedResourcesForPod(podName UniquePodName) []PreparedResource
+	GetPreparedResourcesForPod(podName cdi.UniquePodName) []PreparedResource
 
 	// SyncResource checks the resource.claimName in asw and
 	// the one populated from dsw , if they do not match, update this field from the value from dsw.
-	SyncResource(resourceName UniqueResourceName, podName UniquePodName, claimUUID types.UID)
+	SyncResource(resourceName cdi.UniqueResourceName, podName cdi.UniquePodName, claimUUID types.UID)
 }
 
 // PreparedResource represents a resource that has successfully been given to a pod.
 type PreparedResource struct {
-	PodName      UniquePodName
-	ResourceName UniqueResourceName
+	PodName      cdi.UniquePodName
+	ResourceName cdi.UniqueResourceName
 }
 
 // NewActualStateOfWorld returns a new instance of ActualStateOfWorld.
-func NewActualStateOfWorld(nodeName types.NodeName) ActualStateOfWorld {
+func NewActualStateOfWorld() ActualStateOfWorld {
 	return &actualStateOfWorld{
-		nodeName:          nodeName,
-		preparedResources: make(map[UniqueResourceName]preparedResource),
+		preparedResources: make(map[cdi.UniqueResourceName]preparedResource),
 	}
 }
 
 type actualStateOfWorld struct {
-	// nodeName is the name of this node.
-	nodeName types.NodeName
-
 	// preparedResources is a map containing the set of resources the kubelet resource
 	// manager believes to be successfully prepared.
 	// The key in this map is the name of the resource and the value is an object
 	// containing more information about the prepared resource.
-	preparedResources map[UniqueResourceName]preparedResource
+	preparedResources map[cdi.UniqueResourceName]preparedResource
 
 	sync.RWMutex
 }
@@ -93,13 +84,13 @@ type actualStateOfWorld struct {
 // successfully prepared.
 type preparedResource struct {
 	// resourceName contains the unique identifier for this resource.
-	resourceName UniqueResourceName
+	resourceName cdi.UniqueResourceName
 
 	// pods is a map containing the set of pods that this resource has been
 	// successfully used by. The key in this map is the name of the pod and
 	// the value is a attachedPod object containing more information about the
 	// pod.
-	attachedPods map[UniquePodName]attachedPod
+	attachedPods map[cdi.UniquePodName]attachedPod
 
 	// resourceClaim is a claim for this resource
 	// resourceClaim core.PodResourceClaim
@@ -113,13 +104,13 @@ type preparedResource struct {
 // believes the underlying resource has been successfully attached.
 type attachedPod struct {
 	// the name of the pod
-	podName UniquePodName
+	podName cdi.UniquePodName
 
 	// the UID of the pod
 	podUID types.UID
 
 	// resource name
-	resourceName UniqueResourceName
+	resourceName cdi.UniqueResourceName
 
 	// resourceClaim UUID
 	claimUUID types.UID
@@ -157,7 +148,7 @@ func getPreparedResource(
 
 // getPreparedResourcesForPod returns list of prepared resources
 // that are attached to the given pod
-func (asw *actualStateOfWorld) GetPreparedResourcesForPod(podName UniquePodName) []PreparedResource {
+func (asw *actualStateOfWorld) GetPreparedResourcesForPod(podName cdi.UniquePodName) []PreparedResource {
 	asw.RLock()
 	defer asw.RUnlock()
 	preparedResources := []PreparedResource{}
@@ -174,7 +165,7 @@ func (asw *actualStateOfWorld) GetPreparedResourcesForPod(podName UniquePodName)
 	return preparedResources
 }
 
-func (asw *actualStateOfWorld) SyncResource(resourceName UniqueResourceName, podName UniquePodName, resourceClaimUUID types.UID) {
+func (asw *actualStateOfWorld) SyncResource(resourceName cdi.UniqueResourceName, podName cdi.UniquePodName, resourceClaimUUID types.UID) {
 	asw.Lock()
 	defer asw.Unlock()
 	if resourceObj, resourceExists := asw.preparedResources[resourceName]; resourceExists {

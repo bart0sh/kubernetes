@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 
 	cdipbv1 "k8s.io/kubernetes/pkg/kubelet/apis/cdi/v1alpha1"
@@ -57,9 +58,6 @@ type CDIClient interface {
 
 // Strongly typed address
 type cdiAddr string
-
-// Strongly typed plugin name
-type cdiPluginName string
 
 // cdiPluginClient encapsulates all cdi plugin methods
 type cdiPluginClient struct {

@@ -21,12 +21,14 @@ keep track of prepared resources and the pods that use them.
 package cache
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/kubernetes/pkg/cdi"
 )
 
 // DesiredStateOfWorld defines a set of thread-safe operations for the kubelet
@@ -40,7 +42,7 @@ type DesiredStateOfWorld interface {
 	// resource, false is returned.
 	// If a resource with the name resourceName does not exist in the list of
 	// prepared resources, false is returned.
-	PodExistsInResource(podName UniquePodName, resourceName UniqueResourceName) bool
+	PodExistsInResource(podName cdi.UniquePodName, resourceName cdi.UniqueResourceName) bool
 
 	// AddPodToResource adds the given pod to the given resource in the cache
 	// indicating the specified pod should use the specified resource.
@@ -50,26 +52,48 @@ type DesiredStateOfWorld interface {
 	// plugin can support it, an error is returned.
 	// If a pod with the same unique name already exists under the specified
 	// resource, this is a no-op.
-	AddPodToResource(podName UniquePodName, pod *v1.Pod, resourceSpec *ResourceSpec) error
+	AddPodToResource(podName cdi.UniquePodName, pod *v1.Pod, resourceSpec *ResourceSpec) error
 
 	// PopPodErrors returns accumulated errors on a given pod and clears
 	// them.
-	PopPodErrors(podName UniquePodName) []string
+	PopPodErrors(podName cdi.UniquePodName) []string
 
 	// AddErrorToPod adds the given error to the given pod in the cache.
 	// It will be returned by subsequent GetPodErrors().
 	// Each error string is stored only once.
-	AddErrorToPod(podName UniquePodName, err string)
+	AddErrorToPod(podName cdi.UniquePodName, err string)
+
+	// GetResourcesToPrepare generates and returns a list of resources that should be
+	// prepared based on the current desired state of the world.
+	GetResourcesToPrepare() []ResourceToPrepare
 }
 
 // ResourceToPrepare represents a resource that needs to be prepared for PodName
 type ResourceToPrepare struct {
+	// ResourceName contains the unique identifier for this resource.
+	ResourceName cdi.UniqueResourceName
+
+	// resource spec containing the specification for this resource.
+	ResourceSpec *ResourceSpec
+
+	// ReportedInUse indicates that the resource was successfully added to the
+	// ResourceInUse field in the node's status.
+	ReportedInUse bool
+
+	// PodName is the unique identifier for the pod that the resource should be
+	// prepared for
+	PodName cdi.UniquePodName
+
+	// Pod to mount the volume to. Used to create NewMounter.
+	Pod *v1.Pod
+
+	ResourcePluginClient cdi.CDIClient
 }
 
 // ResourceSpec is an internal representation of a resource
 // It contains attributes that are required to prepare and unprepare the resource.
 type ResourceSpec struct {
-	Name                 UniqueResourceName
+	Name                 cdi.UniqueResourceName
 	DriverName           string
 	ResourceClaimUUID    types.UID
 	AllocationAttributes map[string]string
@@ -78,8 +102,8 @@ type ResourceSpec struct {
 // NewDesiredStateOfWorld returns a new instance of DesiredStateOfWorld.
 func NewDesiredStateOfWorld() DesiredStateOfWorld {
 	return &desiredStateOfWorld{
-		resourcesToPrepare: make(map[UniqueResourceName]resourceToPrepare),
-		podErrors:          make(map[UniquePodName]sets.String),
+		resourcesToPrepare: make(map[cdi.UniqueResourceName]resourceToPrepare),
+		podErrors:          make(map[cdi.UniquePodName]sets.String),
 	}
 }
 
@@ -87,10 +111,10 @@ type desiredStateOfWorld struct {
 	// resourcesToPrepare is a map containing the set of resources that should be
 	// prepared on this node. The key in the map is the name of the resource and
 	// the value is a resource object containing more information about the resource.
-	resourcesToPrepare map[UniqueResourceName]resourceToPrepare
+	resourcesToPrepare map[cdi.UniqueResourceName]resourceToPrepare
 
 	// podErrors are errors caught by desiredStateOfWorldPopulator about resources for a given pod.
-	podErrors map[UniquePodName]sets.String
+	podErrors map[cdi.UniquePodName]sets.String
 
 	sync.RWMutex
 }
@@ -99,24 +123,26 @@ type desiredStateOfWorld struct {
 // and available for usage to podsToAttach.
 type resourceToPrepare struct {
 	// resourceName contains the unique identifier for this resource.
-	resourceName UniqueResourceName
+	resourceName cdi.UniqueResourceName
 
 	// podsToAttach is a map containing the set of pods that reference this
-	// resource and should attach it. The key in the map is
+	// resource. The key in the map is
 	// the name of the pod and the value is a pod object containing more
 	// information about the pod.
-	podsToAttach map[UniquePodName]podToAttach
+	podsToAttach map[cdi.UniquePodName]podToAttach
 
 	// reportedInUse indicates that the resource was successfully added to the
 	// ResourceInUse field in the node's status.
 	reportedInUse bool
+
+	resourcePluginClient cdi.CDIClient
 }
 
 // The pod object represents a pod that references the underlying resource and
 // should prepare it.
 type podToAttach struct {
 	// podName contains the name of this pod.
-	podName UniquePodName
+	podName cdi.UniquePodName
 
 	// Pod to use the resource.
 	pod *v1.Pod
@@ -135,7 +161,7 @@ const (
 )
 
 func (dsw *desiredStateOfWorld) PodExistsInResource(
-	podName UniquePodName, resourceName UniqueResourceName) bool {
+	podName cdi.UniquePodName, resourceName cdi.UniqueResourceName) bool {
 	dsw.RLock()
 	defer dsw.RUnlock()
 
@@ -148,7 +174,7 @@ func (dsw *desiredStateOfWorld) PodExistsInResource(
 	return podExists
 }
 
-func (dsw *desiredStateOfWorld) PopPodErrors(podName UniquePodName) []string {
+func (dsw *desiredStateOfWorld) PopPodErrors(podName cdi.UniquePodName) []string {
 	dsw.Lock()
 	defer dsw.Unlock()
 
@@ -159,7 +185,7 @@ func (dsw *desiredStateOfWorld) PopPodErrors(podName UniquePodName) []string {
 	return []string{}
 }
 
-func (dsw *desiredStateOfWorld) AddErrorToPod(podName UniquePodName, err string) {
+func (dsw *desiredStateOfWorld) AddErrorToPod(podName cdi.UniquePodName, err string) {
 	dsw.Lock()
 	defer dsw.Unlock()
 
@@ -173,7 +199,7 @@ func (dsw *desiredStateOfWorld) AddErrorToPod(podName UniquePodName, err string)
 }
 
 func (dsw *desiredStateOfWorld) AddPodToResource(
-	podName UniquePodName,
+	podName cdi.UniquePodName,
 	pod *v1.Pod,
 	resourceSpec *ResourceSpec) error {
 	dsw.Lock()
@@ -192,7 +218,7 @@ func (dsw *desiredStateOfWorld) AddPodToResource(
 	if _, resourceExists := dsw.resourcesToPrepare[resourceName]; !resourceExists {
 		dsw.resourcesToPrepare[resourceName] = resourceToPrepare{
 			resourceName:  resourceName,
-			podsToAttach:  make(map[UniquePodName]podToAttach),
+			podsToAttach:  make(map[cdi.UniquePodName]podToAttach),
 			reportedInUse: false,
 		}
 	}

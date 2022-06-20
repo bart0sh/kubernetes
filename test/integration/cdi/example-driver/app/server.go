@@ -242,12 +242,8 @@ func NewCommand() *cobra.Command {
 	kubeletPluginFlagSets := cliflag.NamedFlagSets{}
 	fs = kubeletPluginFlagSets.FlagSet("kubelet plugin")
 
-	vendorVersion := fs.String("version", "version", "Version")
-	nodeID := fs.String("node-id", "nodeid", "NodeID")
-	endPoint := fs.String("endpoint", "/tmp/cdi.sock", "EndPoint")
-	cdiAddress := fs.String("cdi-address", *endPoint, "Path of the CDI driver socket that the node-driver-registrar will connect to.")
-	kubeletRegistrationPath := fs.String("kubelet-registration-path", *cdiAddress, "Path of the CDI driver socket on the Kubernetes host machine.")
-	pluginRegistrationPath := fs.String("plugin-registration-path", "/var/lib/kubelet/plugins_registry", "Path to Kubernetes plugin registration directory.")
+	cdiAddress := fs.String("cdi-address", "/var/lib/kubelet/plugins/example-driver/cdi.sock", "Path to the CDI driver socket kubelet will use to issue CSI operations.")
+	pluginRegistrationPath := fs.String("plugin-registration-path", "/var/lib/kubelet/plugins_registry", "Path to Kubernetes plugin registration socket.")
 
 	kubeletPlugin := &cobra.Command{
 		Use:   "kubelet-plugin",
@@ -255,7 +251,7 @@ func NewCommand() *cobra.Command {
 		Long:  "cdi-example-driver kubelet-plugin runs as a device plugin for kubelet that supports dynamic resource allocation.",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return server.RunServer(*vendorVersion, *driverName, *nodeID, *endPoint, *kubeletRegistrationPath, *pluginRegistrationPath)
+			return server.RunServer(*driverName, *cdiAddress, *pluginRegistrationPath)
 		},
 	}
 	cmd.AddCommand(kubeletPlugin)

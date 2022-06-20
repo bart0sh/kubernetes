@@ -1,23 +1,29 @@
 package server
 
-func RunServer(vendorVersion, driverName, nodeID, endPoint, kubeletRegistrationPath, pluginRegistrationPath string) error {
+import (
+	"fmt"
+)
+
+func RunServer(driverName, cdiAddress, pluginRegistrationPath string) error {
 	//regsitrar will register driver with Kubelet
 	registrarConfig := nodeRegistrarConfig{
-		cdiDriverName:           driverName,
-		kubeletRegistrationPath: kubeletRegistrationPath,
-		pluginRegistrationPath:  pluginRegistrationPath,
+		cdiDriverName:          driverName,
+		cdiAddress:             cdiAddress,
+		pluginRegistrationPath: pluginRegistrationPath,
 	}
 	registrar := newRegistrar(registrarConfig)
 	go registrar.nodeRegister()
 
 	//driver will listen from a socket that deals with the call from Kubelet
 	driverConfig := nodeServerConfig{
-		NodeID:        nodeID,
-		VendorVersion: vendorVersion,
-		Endpoint:      endPoint,
+		driverName: driverName,
+		cdiAddress: cdiAddress,
 	}
-	driver := newExampleDriver(driverConfig)
-	driver.run()
-
-	return nil
+	if driver, err := newExampleDriver(driverConfig); err != nil {
+		fmt.Printf("new example driver not created with the an error: %v", err)
+		return err
+	} else {
+		driver.run()
+		return nil
+	}
 }

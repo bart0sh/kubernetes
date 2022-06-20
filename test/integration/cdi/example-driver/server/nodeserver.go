@@ -4,8 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 	cdipbv1 "k8s.io/kubernetes/pkg/kubelet/apis/cdi/v1alpha1"
 )
@@ -41,57 +39,56 @@ func (ex *exampleDriver) run() {
 	s.Wait()
 }
 
-func (ex *exampleDriver) NodeGetInfo(ctx context.Context, req *cdipbv1.NodeGetInfoRequest) (*cdipbv1.NodeGetInfoResponse, error) {
-	resp := &cdipbv1.NodeGetInfoResponse{
-		NodeId: ex.config.NodeID,
-	}
-	return resp, nil
-}
-
 func (ex *exampleDriver) NodePrepareResource(ctx context.Context, req *cdipbv1.NodePrepareResourceRequest) (*cdipbv1.NodePrepareResourceResponse, error) {
 	klog.Infof("NodePrepareResource is called")
 
-	// Check arguments
-	if len(req.GetResourceId()) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "Resource ID missing in request")
-	}
-	preparingTargetPath := "/dev/tty"
+	klog.V(4).Infof("NodePrepareResource request: %+v", req)
 
-	// Lock before acting on global state. A production-quality
-	// driver might use more fine-grained locking.
-	ex.mutex.Lock()
-	defer ex.mutex.Unlock()
+	/*
+		// Check arguments
+		if len(req.) == 0 {
+			return nil, status.Error(codes.InvalidArgument, "Resource ID missing in request")
+		}
+		preparingTargetPath := "/dev/tty"
 
-	res, err := ex.state.GetResourceByID(req.ResourceId)
-	if err != nil {
-		return nil, err
-	}
+		// Lock before acting on global state. A production-quality
+		// driver might use more fine-grained locking.
+		ex.mutex.Lock()
+		defer ex.mutex.Unlock()
 
-	if res.Prepared.Has(preparingTargetPath) {
-		klog.V(4).Infof("Resource %q is already prepared at %q, nothing to do.", req.ResourceId, preparingTargetPath)
-		return &cdipbv1.NodePrepareResourceResponse{}, nil
-	}
+		res, err := ex.state.GetResourceByID(req.ResourceId)
+		if err != nil {
+			return nil, err
+		}
 
-	if !res.Prepared.Empty() {
-		return nil, status.Errorf(codes.FailedPrecondition, "resource %q is already prepared at %v", req.ResourceId, res.Prepared)
-	}
+		if res.Prepared.Has(preparingTargetPath) {
+			klog.V(4).Infof("Resource %q is already prepared at %q, nothing to do.", req.ResourceId, preparingTargetPath)
+			return &cdipbv1.NodePrepareResourceResponse{}, nil
+		}
 
-	res.Prepared.Add(preparingTargetPath)
-	if err := ex.state.UpdateResource(res); err != nil {
-		return nil, err
-	}
-	return &cdipbv1.NodePrepareResourceResponse{}, nil
+		if !res.Prepared.Empty() {
+			return nil, status.Errorf(codes.FailedPrecondition, "resource %q is already prepared at %v", req.ResourceId, res.Prepared)
+		}
+
+		res.Prepared.Add(preparingTargetPath)
+		if err := ex.state.UpdateResource(res); err != nil {
+			return nil, err
+		}
+	*/
+	return &cdipbv1.NodePrepareResourceResponse{CdiDevice: []string{"vendor.com/class1=device1", "vendor.com/class2=device2"}}, nil
 }
 
 func (ex *exampleDriver) NodeUnprepareResource(ctx context.Context, req *cdipbv1.NodeUnprepareResourceRequest) (*cdipbv1.NodeUnprepareResourceResponse, error) {
 	klog.Infof("NodeUnprepareResource is called")
 
-	if len(req.GetResourceId()) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "Resource ID missing in request")
-	}
+	klog.V(4).Infof("NodeUnprepareResource request: %+v", req)
 
-	ex.mutex.Lock()
-	defer ex.mutex.Unlock()
+	/*	if len(req.GetResourceId()) == 0 {
+			return nil, status.Error(codes.InvalidArgument, "Resource ID missing in request")
+		}
+
+		ex.mutex.Lock()
+		defer ex.mutex.Unlock()*/
 
 	return &cdipbv1.NodeUnprepareResourceResponse{}, nil
 }

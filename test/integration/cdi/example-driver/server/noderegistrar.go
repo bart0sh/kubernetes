@@ -15,15 +15,13 @@ import (
 )
 
 type nodeRegistrarConfig struct {
-	cdiDriverName           string
-	kubeletRegistrationPath string
-	pluginRegistrationPath  string
+	cdiDriverName          string
+	cdiAddress             string
+	pluginRegistrationPath string
 }
 type nodeRegistrar struct {
 	config nodeRegistrarConfig
 }
-
-var registrationProbePath = ""
 
 // NewRegistrar returns an initialized nodeRegistrar instance
 func newRegistrar(config nodeRegistrarConfig) *nodeRegistrar {
@@ -35,7 +33,7 @@ func (nr nodeRegistrar) nodeRegister() {
 	// When kubeletRegistrationPath is specified then driver-registrar ONLY acts
 	// as gRPC server which replies to registration requests initiated by kubelet's
 	// plugins watcher infrastructure. Node labeling is done by kubelet's csi code.
-	registrationServer := newRegistrationServer(nr.config.cdiDriverName, nr.config.kubeletRegistrationPath, []string{"1.0.0"})
+	registrationServer := newRegistrationServer(nr.config.cdiDriverName, nr.config.cdiAddress, []string{"1.0.0"})
 	socketPath := buildSocketPath(nr.config.cdiDriverName, nr.config.pluginRegistrationPath)
 	if err := cleanupSocketFile(socketPath); err != nil {
 		klog.Errorf("%+v", err)
@@ -60,10 +58,6 @@ func (nr nodeRegistrar) nodeRegister() {
 	klog.Infof("Registration Server started at: %s\n", socketPath)
 	grpcServer := grpc.NewServer()
 
-	// Before registering node-driver-registrar with the kubelet ensure that the lockfile doesn't exist
-	// a lockfile may exist because the container was forcefully shutdown
-	cleanupFile(registrationProbePath)
-
 	// Registers kubelet plugin watcher api.
 	registerapi.RegisterRegistrationServer(grpcServer, registrationServer)
 
@@ -74,8 +68,6 @@ func (nr nodeRegistrar) nodeRegister() {
 		os.Exit(1)
 	}
 
-	// clean the file on graceful shutdown
-	cleanupFile(registrationProbePath)
 	// If gRPC server is gracefully shutdown, cleanup and exit
 	os.Exit(0)
 }
@@ -124,30 +116,6 @@ func doesSocketExist(socketPath string) (bool, error) {
 	}
 	if err != nil && !os.IsNotExist(err) {
 		return false, fmt.Errorf("failed to stat the socket %s with error: %+v", socketPath, err)
-	}
-	return false, nil
-}
-
-func cleanupFile(filePath string) error {
-	fileExists, err := doesFileExist(filePath)
-	if err != nil {
-		return err
-	}
-	if fileExists {
-		if err := os.Remove(filePath); err != nil {
-			return fmt.Errorf("failed to remove stale file=%s with error: %+v", filePath, err)
-		}
-	}
-	return nil
-}
-
-func doesFileExist(filePath string) (bool, error) {
-	info, err := os.Stat(filePath)
-	if err == nil {
-		return info.Mode().IsRegular(), nil
-	}
-	if err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("failed to stat the file=%s with error: %+v", filePath, err)
 	}
 	return false, nil
 }

@@ -14,8 +14,10 @@ require (
 )
 
 replace (
+	github.com/fsnotify/fsnotify => github.com/fsnotify/fsnotify v1.4.9
 	k8s.io/api => ../api
 	k8s.io/apimachinery => ../apimachinery
 	k8s.io/client-go => ../client-go
 	k8s.io/component-helpers => ../component-helpers
+	sigs.k8s.io/yaml => sigs.k8s.io/yaml v1.2.0
 )

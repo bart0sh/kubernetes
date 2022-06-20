@@ -44,10 +44,11 @@ require (
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2
 	sigs.k8s.io/kustomize/kustomize/v4 v4.5.4
 	sigs.k8s.io/kustomize/kyaml v0.13.6
-	sigs.k8s.io/yaml v1.2.0
+	sigs.k8s.io/yaml v1.3.0
 )
 
 replace (
+	github.com/fsnotify/fsnotify => github.com/fsnotify/fsnotify v1.4.9
 	k8s.io/api => ../api
 	k8s.io/apimachinery => ../apimachinery
 	k8s.io/cli-runtime => ../cli-runtime
@@ -57,4 +58,5 @@ replace (
 	k8s.io/component-helpers => ../component-helpers
 	k8s.io/kubectl => ../kubectl
 	k8s.io/metrics => ../metrics
+	sigs.k8s.io/yaml => sigs.k8s.io/yaml v1.2.0
 )

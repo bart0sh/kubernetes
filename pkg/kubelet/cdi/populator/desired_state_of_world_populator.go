@@ -27,6 +27,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/component-helpers/cdi/resourceclaim"
 	"k8s.io/klog/v2"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -186,7 +187,8 @@ func GetUniquePodName(pod *v1.Pod) cdi.UniquePodName {
 func (dswp *desiredStateOfWorldPopulator) createResourceSpec(
 	podResourceClaim v1.PodResourceClaim, pod *v1.Pod) (*cache.ResourceSpec, error) {
 
-	claimName := *podResourceClaim.ResourceClaimName
+	claimName := resourceclaim.Name(pod, &podResourceClaim)
+
 	resourceClaim, err := dswp.kubeClient.CdiV1alpha1().ResourceClaims(pod.Namespace).Get(context.TODO(), claimName, metav1.GetOptions{})
 
 	if err != nil {

@@ -46,8 +46,6 @@ type DesiredStateOfWorld interface {
 
 	// AddPodToResource adds the given pod to the given resource in the cache
 	// indicating the specified pod should use the specified resource.
-	// A unique resourceName is generated from the resourceSpec and returned on
-	// success.
 	// If no resource plugin can support the given resourceSpec or more than one
 	// plugin can support it, an error is returned.
 	// If a pod with the same unique name already exists under the specified
@@ -224,7 +222,7 @@ func (dsw *desiredStateOfWorld) AddPodToResource(
 		}
 	}
 
-	// Create new podToPrepare object. If it already exists, it is refreshed with
+	// Create new podToAttach object. If it already exists, it is refreshed with
 	// updated values (this is required for resources that require re-preparing on
 	// pod update, like Downward API resources).
 	dsw.resourcesToPrepare[resourceName].podsToAttach[podName] = podToAttach{

@@ -149,6 +149,9 @@ func (rm *resourceManager) Run(sourcesReady config.SourcesReady, stopCh <-chan s
 	klog.InfoS("Starting Kubelet Resource Manager")
 	defer runtime.HandleCrash()
 
+	go rm.desiredStateOfWorldPopulator.Run(sourcesReady, stopCh)
+	klog.V(2).InfoS("The desired_state_of_world populator starts")
+
 	go rm.reconciler.Run(stopCh)
 
 	<-stopCh

@@ -167,11 +167,9 @@ func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods() {
 // podPreviouslyProcessed returns true if the resources for this pod have already
 // been processed/reprocessed by the populator. Otherwise, the resources for this pod need to
 // be reprocessed.
-func (dswp *desiredStateOfWorldPopulator) podPreviouslyProcessed(
-	podName cdi.UniquePodName) bool {
+func (dswp *desiredStateOfWorldPopulator) podPreviouslyProcessed(podName cdi.UniquePodName) bool {
 	dswp.pods.RLock()
 	defer dswp.pods.RUnlock()
-
 	return dswp.pods.processedPods[podName]
 }
 
@@ -218,16 +216,20 @@ func GetUniqueResourceName(
 func (dswp *desiredStateOfWorldPopulator) processPodResources(
 	pod *v1.Pod,
 	preparedResourcesForPod map[cdi.UniquePodName]map[cdi.UniqueResourceName]cache.PreparedResource) {
+
 	if pod == nil {
 		return
 	}
 
 	uniquePodName := GetUniquePodName(pod)
 	if dswp.podPreviouslyProcessed(uniquePodName) {
+		klog.V(4).Infof("Pod %s has been previously processed, skipping ...", uniquePodName)
 		return
 	}
 
 	allResourcesAdded := true
+
+	klog.V(4).Infof("processPodResources, spec: %+v", pod.Spec)
 
 	// Process resources for each resource claim defined in pod
 	for _, podResourceClaim := range pod.Spec.ResourceClaims {

@@ -21,6 +21,7 @@ keep track of prepared resources and the pods that use them.
 package cache
 
 import (
+	"fmt"
 	"sync"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -52,9 +53,38 @@ type ActualStateOfWorld interface {
 	// of the world.
 	GetPreparedResourcesForPod(podName cdi.UniquePodName) []PreparedResource
 
+	// AddPodToResource adds the given pod to the given resource in the cache
+	// indicating the specified resource has been successfully prepared for
+	// the specified pod.
+	// If a pod with the same unique name already exists under the specified
+	// resource, reset the pod's preparationRequired value.
+	// If a resource with the name resourceName does not exist in the list of
+	// prepared resources, an error is returned.
+	AddPodToResource(resourceToPrepare ResourceToPrepare) error
+
+	// PodExistsInResource returns true if the given pod exists in the list of
+	// attachedPods for the given resource in the cache, indicating that the
+	// resource is allocated to this node and the pod can use it.
+	// If a pod with the same unique name does not exist under the specified
+	// resource, false is returned.
+	// If a resource with the name  resourceName does not exist in the list of
+	// resources, a ResourceNotAllocatedError is returned indicating the
+	// given resource is not yet used by the pod.
+	// If the given resourceName/podName combo exists but the value of
+	// preparatonRequired is true, a preparationRequiredError is returned indicating
+	// the given resource has been successfully prepared to this pod but should be
+	// prepared again to reflect changes in the referencing pod. Atomically updating
+	// resources, depend on this to update the contents of the resource.
+	// All ResourcePrepare calls should be idempotent so a second preparation call for
+	// resources that do not need to update contents should not fail.
+	PodExistsInResource(podName cdi.UniquePodName, resourceName cdi.UniqueResourceName) (bool, error)
+
 	// SyncResource checks the resource.claimName in asw and
 	// the one populated from dsw , if they do not match, update this field from the value from dsw.
 	SyncResource(resourceName cdi.UniqueResourceName, podName cdi.UniquePodName, claimUUID types.UID)
+
+	// MarkResourceAsPrepared adds prepared resource to the
+	MarkResourceAsPrepared(resourceToPrepare ResourceToPrepare) error
 }
 
 // PreparedResource represents a resource that has successfully been given to a pod.
@@ -95,9 +125,9 @@ type preparedResource struct {
 	// resourceClaim is a claim for this resource
 	// resourceClaim core.PodResourceClaim
 
-	// pluginName is the Unescaped Qualified name of the resource plugin used to
+	// driverName is the Unescaped Qualified name of the resource plugin used to
 	// prepare this resource.
-	pluginName string
+	driverName string
 }
 
 // The attachedPod object represents a pod for which the kubelet resource manager
@@ -119,6 +149,11 @@ type attachedPod struct {
 	//   - ResourcePrepared: means resource for pod has been successfully prepared
 	//   - ResourceUnprepared: means resource for pod is not prepared, but it must be prepared
 	resourceStateForPod ResourcePreparationState
+
+	// preparationRequired indicates the underlying resource has been successfully
+	// prepared fo this pod but it should be prepared again to reflect changes in the
+	// referencing pod.
+	preparationRequired bool
 }
 
 // GetAllPreparedResources returns resources which could be prepared for a pod.
@@ -176,4 +211,54 @@ func (asw *actualStateOfWorld) SyncResource(resourceName cdi.UniqueResourceName,
 			}
 		}
 	}
+}
+
+func (asw *actualStateOfWorld) PodExistsInResource(podName cdi.UniquePodName, resourceName cdi.UniqueResourceName) (bool, error) {
+	asw.RLock()
+	defer asw.RUnlock()
+
+	resourceObj, resourceExists := asw.preparedResources[resourceName]
+	if !resourceExists {
+		return false, fmt.Errorf("resource %s is not prepared for the pod %s", resourceName, podName)
+	}
+
+	podObj, podExists := resourceObj.attachedPods[podName]
+	if podExists {
+		// if volume mount was uncertain we should keep trying to mount the volume
+		if podObj.resourceStateForPod == ResourceNotPrepared {
+			return false, nil
+		}
+	}
+
+	return podExists, nil
+}
+
+func (asw *actualStateOfWorld) AddPodToResource(resourceToPrepare ResourceToPrepare) error {
+	resourceName := resourceToPrepare.ResourceName
+	resourceSpec := resourceToPrepare.ResourceSpec
+	podName := resourceToPrepare.PodName
+
+	asw.Lock()
+	defer asw.Unlock()
+
+	asw.preparedResources[resourceName] = preparedResource{
+		resourceName: resourceName,
+		driverName:   resourceSpec.DriverName,
+		attachedPods: map[cdi.UniquePodName]attachedPod{
+			podName: {
+				podName:             podName,
+				podUID:              resourceToPrepare.Pod.UID,
+				resourceName:        resourceName,
+				claimUUID:           resourceSpec.ResourceClaimUUID,
+				preparationRequired: false,
+				resourceStateForPod: ResourcePrepared,
+			},
+		},
+	}
+
+	return nil
+}
+
+func (asw *actualStateOfWorld) MarkResourceAsPrepared(resourceToPrepare ResourceToPrepare) error {
+	return asw.AddPodToResource(resourceToPrepare)
 }

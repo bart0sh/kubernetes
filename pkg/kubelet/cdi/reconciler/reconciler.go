@@ -107,22 +107,33 @@ func (rc *reconciler) unprepareResources() {
 
 func (rc *reconciler) prepareResources() {
 	// Ensure resources that should be prepared are prepared.
-	klog.InfoS("Reconciler: prepare resources")
 	for _, resourceToPrepare := range rc.desiredStateOfWorld.GetResourcesToPrepare() {
-		klog.V(4).InfoS("Starting operationExecutor.PrepareResource", "pod", klog.KObj(resourceToPrepare.Pod))
 
-		go func(resourceToPrepare cache.ResourceToPrepare) {
-			err := resourceToPrepare.ResourcePluginClient.NodePrepareResource(
-				context.Background(),
-				resourceToPrepare.Pod.Namespace,
-				resourceToPrepare.ResourceSpec.ResourceClaimUUID,
-				resourceToPrepare.ResourceSpec.Name,
-				resourceToPrepare.ResourceSpec.AllocationAttributes,
-			)
-			if err != nil {
+		resPrepared, err := rc.actualStateOfWorld.PodExistsInResource(resourceToPrepare.PodName, resourceToPrepare.ResourceName)
 
-			}
-		}(resourceToPrepare)
+		if !resPrepared || err != nil {
+			klog.V(4).InfoS("Starting operationExecutor.PrepareResource", "pod", klog.KObj(resourceToPrepare.Pod), "resource", resourceToPrepare)
+
+			go func(resourceToPrepare cache.ResourceToPrepare) {
+				err := resourceToPrepare.ResourcePluginClient.NodePrepareResource(
+					context.Background(),
+					resourceToPrepare.Pod.Namespace,
+					resourceToPrepare.ResourceSpec.ResourceClaimUUID,
+					resourceToPrepare.ResourceSpec.Name,
+					resourceToPrepare.ResourceSpec.AllocationAttributes,
+				)
+				if err != nil {
+					klog.ErrorS(err, "NodePrepareResource failed", "pod", klog.KObj(resourceToPrepare.Pod))
+					return
+				}
+
+				err = rc.actualStateOfWorld.MarkResourceAsPrepared(resourceToPrepare)
+				if err != nil {
+					klog.ErrorS(err, "Could not add prepared resource information to actual state of world", "pod", resourceToPrepare.PodName, "resource", resourceToPrepare.ResourceName)
+					return
+				}
+			}(resourceToPrepare)
+		}
 	}
 }
 
@@ -143,6 +154,11 @@ func (rc *reconciler) StatesHasBeenSynced() bool {
 	return !rc.timeOfLastSync.IsZero()
 }
 
+// syncStates scans the volume directories under the given pod directory.
+// If the volume is not in desired state of world, this function will reconstruct
+// the volume related information and put it in both the actual and desired state of worlds.
+// For some volume plugins that cannot support reconstruction, it will clean up the existing
+// mount points since the volume is no long needed (removed from desired state)
 func (rc *reconciler) syncStates() {
 	klog.InfoS("Reconciler: start to sync state")
 }

@@ -197,7 +197,7 @@ func (dswp *desiredStateOfWorldPopulator) createResourceSpec(
 
 	return &cache.ResourceSpec{
 		Name:                 GetUniqueResourceName(GetUniquePodName(pod), driverName, resourceClaim.GetUID()),
-		DriverName:           driverName,
+		PluginName:           driverName,
 		ResourceClaimUUID:    resourceClaim.GetUID(),
 		AllocationAttributes: resourceClaim.Status.Allocation.Attributes}, nil
 }

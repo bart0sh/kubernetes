@@ -125,9 +125,9 @@ type preparedResource struct {
 	// resourceClaim is a claim for this resource
 	// resourceClaim core.PodResourceClaim
 
-	// driverName is the Unescaped Qualified name of the resource plugin used to
+	// pluginName is the Unescaped Qualified name of the resource plugin used to
 	// prepare this resource.
-	driverName string
+	pluginName string
 }
 
 // The attachedPod object represents a pod for which the kubelet resource manager
@@ -243,7 +243,7 @@ func (asw *actualStateOfWorld) AddPodToResource(resourceToPrepare ResourceToPrep
 
 	asw.preparedResources[resourceName] = preparedResource{
 		resourceName: resourceName,
-		driverName:   resourceSpec.DriverName,
+		pluginName:   resourceSpec.PluginName,
 		attachedPods: map[cdi.UniquePodName]attachedPod{
 			podName: {
 				podName:             podName,

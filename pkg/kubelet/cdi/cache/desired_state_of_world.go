@@ -92,7 +92,7 @@ type ResourceToPrepare struct {
 // It contains attributes that are required to prepare and unprepare the resource.
 type ResourceSpec struct {
 	Name                 cdi.UniqueResourceName
-	DriverName           string
+	PluginName           string
 	ResourceClaimUUID    types.UID
 	AllocationAttributes map[string]string
 }
@@ -203,12 +203,9 @@ func (dsw *desiredStateOfWorld) AddPodToResource(
 	dsw.Lock()
 	defer dsw.Unlock()
 
-	resourcePluginClient, err := cdi.NewCDIPluginClient(resourceSpec.DriverName)
+	resourcePluginClient, err := cdi.NewCDIPluginClient(resourceSpec.PluginName)
 	if err != nil || resourcePluginClient == nil {
-		return fmt.Errorf(
-			"failed to get CDI Plugin for driver name %s, err=%v",
-			resourceSpec.DriverName,
-			err)
+		return fmt.Errorf("failed to get CDI Plugin for plugin name %s, err=%v", resourceSpec.PluginName, err)
 	}
 
 	resourceName := resourceSpec.Name

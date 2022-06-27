@@ -25,9 +25,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/component-helpers/cdi/resourceclaim"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/cdi"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
@@ -165,7 +165,7 @@ func (rm *resourceManager) Run(sourcesReady config.SourcesReady, stopCh <-chan s
 
 // verifyResourcesPreparedFunc returns a method that returns true when all expected
 // resources are prepared.
-func (rm *resourceManager) verifyResourcesPreparedFunc(podName cdi.UniquePodName, expectedResources []string) wait.ConditionFunc {
+func (rm *resourceManager) verifyResourcesPreparedFunc(podName cdi.UniquePodName, expectedResources []cdi.UniqueResourceName) wait.ConditionFunc {
 	return func() (done bool, err error) {
 		if errs := rm.desiredStateOfWorld.PopPodErrors(podName); len(errs) > 0 {
 			return true, errors.New(strings.Join(errs, "; "))
@@ -189,8 +189,8 @@ func (rm *resourceManager) WaitForPreparedResources(pod *v1.Pod) error {
 		return nil
 	}
 
-	klog.V(3).InfoS("Waiting for resources to be prepared for pod %s %s", pod.Name, pod.Status.Phase)
-	uniquePodName := GetUniquePodName(pod)
+	klog.V(3).Infof("Waiting for resources to be prepared for pod %s %s", pod.Name, pod.Status.Phase)
+	uniquePodName := populator.GetUniquePodName(pod)
 
 	rm.desiredStateOfWorldPopulator.ReprocessPod(uniquePodName)
 
@@ -200,38 +200,28 @@ func (rm *resourceManager) WaitForPreparedResources(pod *v1.Pod) error {
 		rm.verifyResourcesPreparedFunc(uniquePodName, expectedResources))
 
 	if err != nil {
-		unpreparedResources :=
-			rm.getUnpreparedResources(uniquePodName, expectedResources)
-
+		unpreparedResources := rm.getUnpreparedResources(uniquePodName, expectedResources)
 		if len(unpreparedResources) == 0 {
 			return nil
 		}
 
-		return fmt.Errorf(
-			"unprepared resources=%v: %s",
-			unpreparedResources,
-			err)
+		return fmt.Errorf("unprepared resources=%v: %s", unpreparedResources, err)
 	}
 
 	klog.V(3).InfoS("All resources are prepared for pod %s %s", pod.Name, pod.Status.Phase)
 	return nil
 }
 
-// GetUniquePodName returns a unique identifier to reference a pod by
-func GetUniquePodName(pod *v1.Pod) cdi.UniquePodName {
-	return cdi.UniquePodName(pod.UID)
-}
-
 // getExpectedResources returns a list of resources that must be prepared in order to
 // consider the resources setup step for this pod satisfied.
-func getExpectedResources(pod *v1.Pod) []string {
-	resources := []string{}
+func getExpectedResources(pod *v1.Pod) []cdi.UniqueResourceName {
+	resources := []cdi.UniqueResourceName{}
 
 	for _, resourceClaim := range pod.Spec.ResourceClaims {
-		resources = append(resources, resourceClaim.Name)
+		resources = append(resources, populator.GetUniqueResourceName(populator.GetUniquePodName(pod), resourceclaim.Name(pod, &resourceClaim)))
 	}
 
-	klog.V(3).InfoS("expected resources for pod %s: %s", pod.Name, strings.Join(resources, ", "))
+	klog.V(3).InfoS("expected resources for pod %s: %s", pod.Name, resources)
 
 	return resources
 }
@@ -239,20 +229,20 @@ func getExpectedResources(pod *v1.Pod) []string {
 // getUnpreparedResources fetches the current list of prepared resources
 // from the actual state of the world, and uses it to process the list of
 // expectedResources. It returns a list of unprepared resources.
-func (rm *resourceManager) getUnpreparedResources(podName cdi.UniquePodName, expectedResources []string) []string {
-	preparedResources := sets.NewString()
+func (rm *resourceManager) getUnpreparedResources(podName cdi.UniquePodName, expectedResources []cdi.UniqueResourceName) []cdi.UniqueResourceName {
+	preparedResources := map[cdi.UniqueResourceName]bool{}
 	for _, preparedResource := range rm.actualStateOfWorld.GetPreparedResourcesForPod(podName) {
-		preparedResources.Insert(string(preparedResource.ResourceName))
+		preparedResources[preparedResource.ResourceName] = true
 	}
 	return filterUnpreparedResources(preparedResources, expectedResources)
 }
 
 // filterUnpreparedResources adds each element of expectedResources that is not in
 // preparedResources to a list of unpreparedResources and returns it.
-func filterUnpreparedResources(preparedResources sets.String, expectedResources []string) []string {
-	unpreparedResources := []string{}
+func filterUnpreparedResources(preparedResources map[cdi.UniqueResourceName]bool, expectedResources []cdi.UniqueResourceName) []cdi.UniqueResourceName {
+	unpreparedResources := []cdi.UniqueResourceName{}
 	for _, expectedResource := range expectedResources {
-		if !preparedResources.Has(expectedResource) {
+		if _, exists := preparedResources[expectedResource]; !exists {
 			unpreparedResources = append(unpreparedResources, expectedResource)
 		}
 	}

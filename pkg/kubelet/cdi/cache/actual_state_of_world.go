@@ -178,7 +178,7 @@ func (asw *actualStateOfWorld) GetAllPreparedResources() []PreparedResource {
 // attachedPod and preparedResource objects.
 func getPreparedResource(
 	attachedPod *attachedPod, preparedResource *preparedResource) PreparedResource {
-	return PreparedResource{}
+	return PreparedResource{PodName: attachedPod.podName, ResourceName: preparedResource.resourceName}
 }
 
 // getPreparedResourcesForPod returns list of prepared resources
@@ -246,7 +246,7 @@ func (asw *actualStateOfWorld) AddPodToResource(resourceToPrepare ResourceToPrep
 		pluginName:   resourceSpec.PluginName,
 		attachedPods: map[cdi.UniquePodName]attachedPod{
 			podName: {
-				podName:             podName,
+				podName:             resourceToPrepare.PodName,
 				podUID:              resourceToPrepare.Pod.UID,
 				resourceName:        resourceName,
 				claimUUID:           resourceSpec.ResourceClaimUUID,

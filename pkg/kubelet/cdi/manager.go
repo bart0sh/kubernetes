@@ -39,6 +39,10 @@ import (
 )
 
 const (
+	// reconcilerLoopSleepPeriod is the amount of time the reconciler loop waits
+	// between successive executions
+	reconcilerLoopSleepPeriod = 100 * time.Millisecond
+
 	// podPrepareResourceTimeout is the maximum amount of time the
 	// WaitForPreparedResources call will wait for all CDI resources in the specified pod
 	// to be prepared. Even though resource preparation operations can take long
@@ -140,6 +144,7 @@ func NewResourceManager(
 		rm.desiredStateOfWorld,
 		rm.actualStateOfWorld,
 		rm.desiredStateOfWorldPopulator.HasAddedPods,
+		reconcilerLoopSleepPeriod,
 	)
 
 	return rm

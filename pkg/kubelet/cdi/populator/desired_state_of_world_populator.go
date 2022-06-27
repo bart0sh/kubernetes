@@ -159,7 +159,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods() {
 			// Do not (re)add resources for pods that can't also be starting containers
 			continue
 		}
-		klog.V(4).Infof("findAndAddNewPods: pod: %+v, resources: %+v", pod, preparedResourcesForPod)
+		klog.V(4).Infof("findAndAddNewPods: pod: %+s, resources: %+v", pod.Name, preparedResourcesForPod)
 		dswp.processPodResources(pod, preparedResourcesForPod)
 	}
 }
@@ -196,7 +196,7 @@ func (dswp *desiredStateOfWorldPopulator) createResourceSpec(
 	driverName := resourceClaim.Status.DriverName
 
 	return &cache.ResourceSpec{
-		Name:                 GetUniqueResourceName(GetUniquePodName(pod), driverName, resourceClaim.GetUID()),
+		Name:                 GetUniqueResourceName(GetUniquePodName(pod), claimName),
 		PluginName:           driverName,
 		ResourceClaimUUID:    resourceClaim.GetUID(),
 		AllocationAttributes: resourceClaim.Status.Allocation.Attributes}, nil
@@ -206,9 +206,9 @@ func (dswp *desiredStateOfWorldPopulator) createResourceSpec(
 // name included. This is useful to generate different names for different pods
 // using the same resource.
 func GetUniqueResourceName(
-	podName cdi.UniquePodName, pluginName string, resourceClaimUID types.UID) cdi.UniqueResourceName {
+	podName cdi.UniquePodName, resourceClaimName string) cdi.UniqueResourceName {
 	return cdi.UniqueResourceName(
-		fmt.Sprintf("%s/%v-%s", pluginName, podName, resourceClaimUID))
+		fmt.Sprintf("%s-%s", podName, resourceClaimName))
 }
 
 // processPodResources processes the resources in the given pod and adds them to the

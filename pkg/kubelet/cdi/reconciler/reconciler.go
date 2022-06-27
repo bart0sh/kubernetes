@@ -113,7 +113,7 @@ func (rc *reconciler) prepareResources() {
 		resPrepared, err := rc.actualStateOfWorld.PodExistsInResource(resourceToPrepare.PodName, resourceToPrepare.ResourceName)
 
 		if !resPrepared || err != nil {
-			klog.V(4).InfoS("Starting operationExecutor.PrepareResource", "pod", klog.KObj(resourceToPrepare.Pod), "resource", resourceToPrepare)
+			klog.V(4).InfoS("calling NodePrepareResource", "pod", klog.KObj(resourceToPrepare.Pod), "resource", resourceToPrepare)
 
 			go func(resourceToPrepare cache.ResourceToPrepare) {
 				err := resourceToPrepare.ResourcePluginClient.NodePrepareResource(
@@ -133,6 +133,7 @@ func (rc *reconciler) prepareResources() {
 					klog.ErrorS(err, "Could not add prepared resource information to actual state of world", "pod", resourceToPrepare.PodName, "resource", resourceToPrepare.ResourceName)
 					return
 				}
+
 			}(resourceToPrepare)
 		}
 	}

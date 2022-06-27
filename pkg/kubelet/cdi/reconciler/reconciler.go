@@ -47,12 +47,13 @@ type Reconciler interface {
 // NewReconciler returns a new instance of Reconciler.
 // nodeName - the Name for this node
 func NewReconciler(nodeName types.NodeName, desiredStateOfWorld cache.DesiredStateOfWorld,
-	actualStateOfWorld cache.ActualStateOfWorld, populatorHasAddedPods func() bool) Reconciler {
+	actualStateOfWorld cache.ActualStateOfWorld, populatorHasAddedPods func() bool, loopSleepDuration time.Duration) Reconciler {
 	return &reconciler{
 		nodeName:              nodeName,
 		desiredStateOfWorld:   desiredStateOfWorld,
 		actualStateOfWorld:    actualStateOfWorld,
 		populatorHasAddedPods: populatorHasAddedPods,
+		loopSleepDuration:     loopSleepDuration,
 		timeOfLastSync:        time.Time{},
 	}
 }

@@ -48,7 +48,7 @@ var kind = "vendor.com/device"
 var deviceName = "example"
 
 func (ex *exampleDriver) NodePrepareResource(ctx context.Context, req *cdipbv1.NodePrepareResourceRequest) (*cdipbv1.NodePrepareResourceResponse, error) {
-	klog.Infof("NodePrepareResource is called")
+	klog.Infof("NodePrepareResource is called: request: %+v", req)
 	// create CDI Files
 
 	if _, err := os.Stat(devicePath); os.IsNotExist(err) {
@@ -109,7 +109,7 @@ func (ex *exampleDriver) NodePrepareResource(ctx context.Context, req *cdipbv1.N
 }
 
 func (ex *exampleDriver) NodeUnprepareResource(ctx context.Context, req *cdipbv1.NodeUnprepareResourceRequest) (*cdipbv1.NodeUnprepareResourceResponse, error) {
-	klog.Infof("NodeUnprepareResource is called")
+	klog.Infof("NodeUnprepareResource is called: request: %+v", req)
 	os.Remove(jsonFilePath)
 	return &cdipbv1.NodeUnprepareResourceResponse{}, nil
 }

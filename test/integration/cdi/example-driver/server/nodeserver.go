@@ -82,7 +82,7 @@ func (ex *exampleDriver) NodePrepareResource(ctx context.Context, req *cdipbv1.N
 				}},
 				ContainerEdits: *containerEdits.ContainerEdits,
 			},
-			devicePath, 1)
+			jsonFilePath, 1)
 		if err != nil {
 			return nil, err
 		} else {

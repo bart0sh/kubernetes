@@ -21,8 +21,10 @@ package reconciler
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	"github.com/container-orchestrated-devices/container-device-interface/pkg/cdi"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
@@ -135,6 +137,17 @@ func (rc *reconciler) prepareResources() {
 					klog.ErrorS(err, "Could not add prepared resource information to actual state of world", "pod", resourceToPrepare.PodName, "resource", resourceToPrepare.ResourceName)
 					return
 				}
+
+				for _, device := range response.CdiDevice {
+					deviceID := strings.Replace(strings.Replace(device, "/", "-", -1), "=", "-", -1)
+					annotations, err := cdi.UpdateAnnotations(resourceToPrepare.Pod.Annotations, resourceToPrepare.ResourceSpec.PluginName, deviceID, response.CdiDevice)
+					if err != nil {
+						klog.ErrorS(err, "Could not update annotaions", "device", device, "device id", deviceID)
+						return
+					}
+					klog.V(4).Infof("prepareResource: cdi annotations: %+v", annotations)
+				}
+				klog.V(4).Infof("prepareResources: pod annotations: %+v", resourceToPrepare.Pod.Annotations)
 
 			}(resourceToPrepare)
 		}

@@ -15,7 +15,8 @@ metadata:
 spec:
   containers:
   - name: pause
-    image: "k8s.gcr.io/pause:3.6"
+    image: ubuntu:22.04
+    command: ["sleep", "12345"]
     resources:
       claims:
       - resource

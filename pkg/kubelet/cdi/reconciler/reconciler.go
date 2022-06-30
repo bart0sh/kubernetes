@@ -116,7 +116,7 @@ func (rc *reconciler) prepareResources() {
 			klog.V(4).InfoS("calling NodePrepareResource", "pod", klog.KObj(resourceToPrepare.Pod), "resource", resourceToPrepare)
 
 			go func(resourceToPrepare cache.ResourceToPrepare) {
-				err := resourceToPrepare.ResourcePluginClient.NodePrepareResource(
+				response, err := resourceToPrepare.ResourcePluginClient.NodePrepareResource(
 					context.Background(),
 					resourceToPrepare.Pod.Namespace,
 					resourceToPrepare.ResourceSpec.ResourceClaimUUID,
@@ -127,6 +127,8 @@ func (rc *reconciler) prepareResources() {
 					klog.ErrorS(err, "NodePrepareResource failed", "pod", klog.KObj(resourceToPrepare.Pod))
 					return
 				}
+
+				klog.V(4).Infof("NodePreparResource: response: %+v", response)
 
 				err = rc.actualStateOfWorld.MarkResourceAsPrepared(resourceToPrepare)
 				if err != nil {

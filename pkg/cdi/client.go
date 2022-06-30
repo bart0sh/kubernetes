@@ -45,7 +45,7 @@ type CDIClient interface {
 		claimUID types.UID,
 		claimName UniqueResourceName,
 		allocationAttributes map[string]string,
-	) error
+	) (*cdipbv1.NodePrepareResourceResponse, error)
 
 	NodeUnprepareResource(
 		ctx context.Context,
@@ -53,7 +53,7 @@ type CDIClient interface {
 		claimUID types.UID,
 		claimName UniqueResourceName,
 		cdiDevice []string,
-	) error
+	) (*cdipbv1.NodeUnprepareResourceResponse, error)
 }
 
 // Strongly typed address
@@ -129,7 +129,7 @@ func (r *cdiPluginClient) NodePrepareResource(
 	claimUID types.UID,
 	claimName UniqueResourceName,
 	allocationAttributes map[string]string,
-) error {
+) (*cdipbv1.NodePrepareResourceResponse, error) {
 	klog.V(4).InfoS(
 		log("calling NodePrepareResource rpc"),
 		"namespace", namespace,
@@ -138,12 +138,12 @@ func (r *cdiPluginClient) NodePrepareResource(
 		"allocation attributes", allocationAttributes)
 
 	if r.nodeV1ClientCreator == nil {
-		return errors.New("failed to call NodePrepareResource. nodeV1ClientCreator is nil")
+		return nil, errors.New("failed to call NodePrepareResource. nodeV1ClientCreator is nil")
 	}
 
 	nodeClient, closer, err := r.nodeV1ClientCreator(r.addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer closer.Close()
 
@@ -154,11 +154,11 @@ func (r *cdiPluginClient) NodePrepareResource(
 		Attributes: allocationAttributes,
 	}
 
-	_, err = nodeClient.NodePrepareResource(ctx, req)
+	response, err := nodeClient.NodePrepareResource(ctx, req)
 	if err != nil && !isFinalError(err) {
-		return NewUncertainProgressError(err.Error())
+		return nil, NewUncertainProgressError(err.Error())
 	}
-	return err
+	return response, err
 }
 
 func (r *cdiPluginClient) NodeUnprepareResource(
@@ -167,7 +167,7 @@ func (r *cdiPluginClient) NodeUnprepareResource(
 	claimUID types.UID,
 	claimName UniqueResourceName,
 	cdiDevices []string,
-) error {
+) (*cdipbv1.NodeUnprepareResourceResponse, error) {
 	klog.V(4).InfoS(
 		log("calling NodeUnprepareResource rpc"),
 		"namespace", namespace,
@@ -175,12 +175,12 @@ func (r *cdiPluginClient) NodeUnprepareResource(
 		"claim name", claimName,
 		"cdi devices", cdiDevices)
 	if r.nodeV1ClientCreator == nil {
-		return errors.New("nodeV1ClientCreate is nil")
+		return nil, errors.New("nodeV1ClientCreate is nil")
 	}
 
 	nodeClient, closer, err := r.nodeV1ClientCreator(r.addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer closer.Close()
 
@@ -191,8 +191,12 @@ func (r *cdiPluginClient) NodeUnprepareResource(
 		CdiDevice: cdiDevices,
 	}
 
-	_, err = nodeClient.NodeUnprepareResource(ctx, req)
-	return err
+	response, err := nodeClient.NodeUnprepareResource(ctx, req)
+	if err != nil && !isFinalError(err) {
+		return nil, NewUncertainProgressError(err.Error())
+	}
+
+	return response, err
 }
 
 func newGrpcConn(addr cdiAddr) (*grpc.ClientConn, error) {

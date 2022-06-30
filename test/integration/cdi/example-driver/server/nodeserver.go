@@ -42,8 +42,8 @@ func (ex *exampleDriver) run() {
 }
 
 var jsonFilePath = "/etc/cdi/vendor.json"
-var devicePath = "/dev/tty"
-var cdiVersion = "0.4.0"
+var devicePath = "/dev/tty8"
+var cdiVersion = "0.2.0"
 var kind = "vendor.com/device"
 var deviceName = "example"
 

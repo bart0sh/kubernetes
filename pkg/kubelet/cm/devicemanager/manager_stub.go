@@ -97,3 +97,6 @@ func (h *ManagerStub) ShouldResetExtendedResourceCapacity() bool {
 func (h *ManagerStub) UpdateAllocatedDevices() {
 	return
 }
+
+// SetCDIReconciler does nothing
+func (h *ManagerStub) SetCDIReconciler() {}

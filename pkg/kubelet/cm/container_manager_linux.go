@@ -49,6 +49,7 @@ import (
 	podresourcesapi "k8s.io/kubelet/pkg/apis/podresources/v1"
 	kubefeatures "k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
+	"k8s.io/kubernetes/pkg/kubelet/cdi/reconciler"
 	"k8s.io/kubernetes/pkg/kubelet/cm/admission"
 	"k8s.io/kubernetes/pkg/kubelet/cm/containermap"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager"
@@ -128,6 +129,8 @@ type containerManagerImpl struct {
 	memoryManager memorymanager.Manager
 	// Interface for Topology resource co-ordination
 	topologyManager topologymanager.Manager
+	// Interface for CDI resource management.
+	cdiReconciler reconciler.Reconciler
 }
 
 type features struct {
@@ -990,6 +993,10 @@ func (cm *containerManagerImpl) ShouldResetExtendedResourceCapacity() bool {
 
 func (cm *containerManagerImpl) UpdateAllocatedDevices() {
 	cm.deviceManager.UpdateAllocatedDevices()
+}
+
+func (cm *containerManagerImpl) SetCDIReconciler(cdiReconciler reconciler.Reconciler) {
+	cm.cdiReconciler = cdiReconciler
 }
 
 func containerMemoryFromBlock(blocks []memorymanagerstate.Block) []*podresourcesapi.ContainerMemory {

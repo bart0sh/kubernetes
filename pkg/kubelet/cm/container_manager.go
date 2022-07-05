@@ -29,6 +29,7 @@ import (
 	podresourcesapi "k8s.io/kubelet/pkg/apis/podresources/v1"
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 	"k8s.io/kubernetes/pkg/kubelet/apis/podresources"
+	"k8s.io/kubernetes/pkg/kubelet/cdi/reconciler"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager"
 	"k8s.io/kubernetes/pkg/kubelet/config"
@@ -114,6 +115,9 @@ type ContainerManager interface {
 
 	// GetNodeAllocatableAbsolute returns the absolute value of Node Allocatable which is primarily useful for enforcement.
 	GetNodeAllocatableAbsolute() v1.ResourceList
+
+	// SetCDIManager
+	SetCDIReconciler(reconciler.Reconciler)
 
 	// Implements the podresources Provider API for CPUs, Memory and Devices
 	podresources.CPUsProvider

@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	podresourcesapi "k8s.io/kubelet/pkg/apis/podresources/v1"
+	"k8s.io/kubernetes/pkg/kubelet/cdi/reconciler"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/memorymanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
@@ -233,3 +234,5 @@ func (cm *FakeContainerManager) GetNodeAllocatableAbsolute() v1.ResourceList {
 	defer cm.Unlock()
 	return nil
 }
+
+func (cm *FakeContainerManager) SetCDIReconciler(reconciler.Reconciler) {}

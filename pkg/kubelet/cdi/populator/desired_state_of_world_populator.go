@@ -37,7 +37,6 @@ import (
 	"k8s.io/kubernetes/pkg/cdi"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
 	"k8s.io/kubernetes/pkg/kubelet/config"
-	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/pod"
 )
 
@@ -84,8 +83,7 @@ func NewDesiredStateOfWorldPopulator(
 	podManager pod.Manager,
 	podStateProvider podStateProvider,
 	desiredStateOfWorld cache.DesiredStateOfWorld,
-	actualStateOfWorld cache.ActualStateOfWorld,
-	kubeContainerRuntime kubecontainer.Runtime) DesiredStateOfWorldPopulator {
+	actualStateOfWorld cache.ActualStateOfWorld) DesiredStateOfWorldPopulator {
 	return &desiredStateOfWorldPopulator{
 		kubeClient:                kubeClient,
 		loopSleepDuration:         loopSleepDuration,
@@ -96,9 +94,8 @@ func NewDesiredStateOfWorldPopulator(
 		actualStateOfWorld:        actualStateOfWorld,
 		pods: processedPods{
 			processedPods: make(map[cdi.UniquePodName]bool)},
-		kubeContainerRuntime: kubeContainerRuntime,
-		hasAddedPods:         false,
-		hasAddedPodsLock:     sync.RWMutex{},
+		hasAddedPods:     false,
+		hasAddedPodsLock: sync.RWMutex{},
 	}
 }
 
@@ -111,7 +108,6 @@ type desiredStateOfWorldPopulator struct {
 	desiredStateOfWorld       cache.DesiredStateOfWorld
 	actualStateOfWorld        cache.ActualStateOfWorld
 	pods                      processedPods
-	kubeContainerRuntime      kubecontainer.Runtime
 	timeOfLastGetPodStatus    time.Time
 	hasAddedPods              bool
 	hasAddedPodsLock          sync.RWMutex

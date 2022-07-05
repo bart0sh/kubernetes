@@ -136,8 +136,7 @@ func NewResourceManager(
 		podManager,
 		podStateProvider,
 		rm.desiredStateOfWorld,
-		rm.actualStateOfWorld,
-		kubeContainerRuntime)
+		rm.actualStateOfWorld)
 
 	rm.reconciler = reconciler.NewReconciler(
 		nodeName,

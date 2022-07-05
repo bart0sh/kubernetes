@@ -753,9 +753,9 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		klet.dnsConfigurer.SetupDNSinContainerizedMounter(experimentalMounterPath)
 	}
 
-	// setup CDI resoruce manager
+	// setup CDI resource manager
 	if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
-		klet.cdiManager = cdi.NewResourceManager(nodeName, klet.podManager, klet.podWorkers, klet.kubeClient, klet.containerRuntime)
+		klet.cdiManager = cdi.NewResourceManager(nodeName, klet.podManager, klet.podWorkers, klet.kubeClient, klet.containerManager)
 	}
 
 	// setup volumeManager

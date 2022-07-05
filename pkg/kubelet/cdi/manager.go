@@ -33,8 +33,8 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/populator"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/reconciler"
+	"k8s.io/kubernetes/pkg/kubelet/cm"
 	"k8s.io/kubernetes/pkg/kubelet/config"
-	"k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/pod"
 )
 
@@ -107,6 +107,11 @@ type resourceManager struct {
 	// desiredStateOfWorldPopulator runs an asynchronous periodic loop to
 	// populate the desiredStateOfWorld using the kubelet PodManager.
 	desiredStateOfWorldPopulator populator.DesiredStateOfWorldPopulator
+
+	// containerManager manages containers running on the machine
+	// resourceManager uses it to set container annotations in
+	// order to pass CDI device names down to the CRI runtime
+	containerManager cm.ContainerManager
 }
 
 // podStateProvider can determine if a pod is is going to be terminated
@@ -122,11 +127,12 @@ func NewResourceManager(
 	podManager pod.Manager,
 	podStateProvider podStateProvider,
 	kubeClient clientset.Interface,
-	kubeContainerRuntime container.Runtime) ResourceManager {
+	containerManager cm.ContainerManager) ResourceManager {
 
 	rm := &resourceManager{
 		desiredStateOfWorld: cache.NewDesiredStateOfWorld(), // TODO: add parameter resourcePluginManager
 		actualStateOfWorld:  cache.NewActualStateOfWorld(),
+		containerManager:    containerManager,
 	}
 
 	rm.desiredStateOfWorldPopulator = populator.NewDesiredStateOfWorldPopulator(
@@ -145,6 +151,8 @@ func NewResourceManager(
 		rm.desiredStateOfWorldPopulator.HasAddedPods,
 		reconcilerLoopSleepPeriod,
 	)
+
+	containerManager.SetCDIReconciler(rm.reconciler)
 
 	return rm
 }

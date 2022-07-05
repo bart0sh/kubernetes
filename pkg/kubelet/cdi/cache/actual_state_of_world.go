@@ -26,6 +26,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/cdi"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
 // ResourcePreparationState represents resource preparation state
@@ -89,8 +90,10 @@ type ActualStateOfWorld interface {
 
 // PreparedResource represents a resource that has successfully been given to a pod.
 type PreparedResource struct {
-	PodName      cdi.UniquePodName
-	ResourceName cdi.UniqueResourceName
+	PodName            cdi.UniquePodName
+	ResourceName       cdi.UniqueResourceName
+	ContainerClaimName string
+	Annotations        []kubecontainer.Annotation
 }
 
 // NewActualStateOfWorld returns a new instance of ActualStateOfWorld.
@@ -142,6 +145,9 @@ type attachedPod struct {
 	// resource name
 	resourceName cdi.UniqueResourceName
 
+	// container claim name
+	containerClaimName string
+
 	// resourceClaim UUID
 	claimUUID types.UID
 
@@ -154,6 +160,9 @@ type attachedPod struct {
 	// prepared fo this pod but it should be prepared again to reflect changes in the
 	// referencing pod.
 	preparationRequired bool
+
+	// CDI annotations
+	annotations map[string]string
 }
 
 // GetAllPreparedResources returns resources which could be prepared for a pod.
@@ -178,7 +187,11 @@ func (asw *actualStateOfWorld) GetAllPreparedResources() []PreparedResource {
 // attachedPod and preparedResource objects.
 func getPreparedResource(
 	attachedPod *attachedPod, preparedResource *preparedResource) PreparedResource {
-	return PreparedResource{PodName: attachedPod.podName, ResourceName: preparedResource.resourceName}
+	var annotations []kubecontainer.Annotation
+	for key, val := range attachedPod.annotations {
+		annotations = append(annotations, kubecontainer.Annotation{Name: key, Value: val})
+	}
+	return PreparedResource{PodName: attachedPod.podName, ResourceName: preparedResource.resourceName, ContainerClaimName: attachedPod.containerClaimName, Annotations: annotations}
 }
 
 // getPreparedResourcesForPod returns list of prepared resources
@@ -249,9 +262,11 @@ func (asw *actualStateOfWorld) AddPodToResource(resourceToPrepare ResourceToPrep
 				podName:             resourceToPrepare.PodName,
 				podUID:              resourceToPrepare.Pod.UID,
 				resourceName:        resourceName,
+				containerClaimName:  resourceSpec.ContainerClaimName,
 				claimUUID:           resourceSpec.ResourceClaimUUID,
 				preparationRequired: false,
 				resourceStateForPod: ResourcePrepared,
+				annotations:         resourceSpec.Annotations,
 			},
 		},
 	}

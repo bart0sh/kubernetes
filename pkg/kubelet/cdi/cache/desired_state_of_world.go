@@ -93,8 +93,10 @@ type ResourceToPrepare struct {
 type ResourceSpec struct {
 	Name                 cdi.UniqueResourceName
 	PluginName           string
+	ContainerClaimName   string
 	ResourceClaimUUID    types.UID
 	AllocationAttributes map[string]string
+	Annotations          map[string]string
 }
 
 // NewDesiredStateOfWorld returns a new instance of DesiredStateOfWorld.

@@ -187,6 +187,11 @@ func (dswp *desiredStateOfWorldPopulator) createResourceSpec(
 
 	claimName := resourceclaim.Name(pod, &podResourceClaim)
 
+	containerClaimName := podResourceClaim.Name
+	if podResourceClaim.ResourceClaimName != nil {
+		containerClaimName = *podResourceClaim.ResourceClaimName
+	}
+
 	resourceClaim, err := dswp.kubeClient.CdiV1alpha1().ResourceClaims(pod.Namespace).Get(context.TODO(), claimName, metav1.GetOptions{})
 
 	if err != nil {
@@ -198,8 +203,11 @@ func (dswp *desiredStateOfWorldPopulator) createResourceSpec(
 	return &cache.ResourceSpec{
 		Name:                 GetUniqueResourceName(GetUniquePodName(pod), claimName),
 		PluginName:           driverName,
+		ContainerClaimName:   containerClaimName,
 		ResourceClaimUUID:    resourceClaim.GetUID(),
-		AllocationAttributes: resourceClaim.Status.Allocation.Attributes}, nil
+		AllocationAttributes: resourceClaim.Status.Allocation.Attributes,
+		Annotations:          map[string]string{},
+	}, nil
 }
 
 // GetUniqueResourceName returns a unique resource name with pod

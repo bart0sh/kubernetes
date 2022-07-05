@@ -24,11 +24,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/container-orchestrated-devices/container-device-interface/pkg/cdi"
+	codcdi "github.com/container-orchestrated-devices/container-device-interface/pkg/cdi"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
+	"k8s.io/kubernetes/pkg/cdi"
 	"k8s.io/kubernetes/pkg/kubelet/cdi/cache"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
 // Reconciler runs a periodic loop to reconcile the desired state of the world
@@ -44,6 +47,11 @@ type Reconciler interface {
 	// StatesHasBeenSynced returns true only after syncStates process starts to sync
 	// states at least once after kubelet starts
 	StatesHasBeenSynced() bool
+
+	// GetCDIAnnotations checks whether we have cached resource
+	// for the passed-in <pod, container> and returns its container annotations or
+	// empty map if resource is not cached
+	GetCDIAnnotations(pod *v1.Pod, container *v1.Container) []kubecontainer.Annotation
 }
 
 // NewReconciler returns a new instance of Reconciler.
@@ -115,7 +123,7 @@ func (rc *reconciler) prepareResources() {
 		resPrepared, err := rc.actualStateOfWorld.PodExistsInResource(resourceToPrepare.PodName, resourceToPrepare.ResourceName)
 
 		if !resPrepared || err != nil {
-			klog.V(4).InfoS("calling NodePrepareResource", "pod", klog.KObj(resourceToPrepare.Pod), "resource", resourceToPrepare)
+			klog.V(4).Infof("calling NodePrepareResource: pod: %p, resource: %+v", resourceToPrepare.Pod, resourceToPrepare)
 
 			go func(resourceToPrepare cache.ResourceToPrepare) {
 				response, err := resourceToPrepare.ResourcePluginClient.NodePrepareResource(
@@ -132,22 +140,31 @@ func (rc *reconciler) prepareResources() {
 
 				klog.V(4).Infof("NodePreparResource: response: %+v", response)
 
+				for _, device := range response.CdiDevice {
+					deviceID := strings.Replace(strings.Replace(device, "/", "-", -1), "=", "-", -1)
+					key, err := codcdi.AnnotationKey(resourceToPrepare.ResourceSpec.PluginName, deviceID)
+					if err != nil {
+						klog.ErrorS(err, "Could not get annotaion key", "plugin", resourceToPrepare.ResourceSpec.PluginName, "device id", deviceID)
+						return
+					}
+					value, err := codcdi.AnnotationValue(response.CdiDevice)
+					if err != nil {
+						klog.ErrorS(err, "Could not get annotaion value", "devices", response.CdiDevice)
+						return
+					}
+
+					val, ok := resourceToPrepare.ResourceSpec.Annotations[key]
+					if !ok || val != value {
+						resourceToPrepare.ResourceSpec.Annotations[key] = value
+						klog.V(4).Infof("prepareResource: pod: %+v: updated annotations: %+v", resourceToPrepare.PodName, resourceToPrepare.ResourceSpec.Annotations)
+					}
+				}
+
 				err = rc.actualStateOfWorld.MarkResourceAsPrepared(resourceToPrepare)
 				if err != nil {
 					klog.ErrorS(err, "Could not add prepared resource information to actual state of world", "pod", resourceToPrepare.PodName, "resource", resourceToPrepare.ResourceName)
 					return
 				}
-
-				for _, device := range response.CdiDevice {
-					deviceID := strings.Replace(strings.Replace(device, "/", "-", -1), "=", "-", -1)
-					annotations, err := cdi.UpdateAnnotations(resourceToPrepare.Pod.Annotations, resourceToPrepare.ResourceSpec.PluginName, deviceID, response.CdiDevice)
-					if err != nil {
-						klog.ErrorS(err, "Could not update annotaions", "device", device, "device id", deviceID)
-						return
-					}
-					klog.V(4).Infof("prepareResource: cdi annotations: %+v", annotations)
-				}
-				klog.V(4).Infof("prepareResources: pod annotations: %+v", resourceToPrepare.Pod.Annotations)
 
 			}(resourceToPrepare)
 		}
@@ -178,4 +195,19 @@ func (rc *reconciler) StatesHasBeenSynced() bool {
 // mount points since the volume is no long needed (removed from desired state)
 func (rc *reconciler) syncStates() {
 	klog.InfoS("Reconciler: start to sync state")
+}
+
+func (rc *reconciler) GetCDIAnnotations(pod *v1.Pod, container *v1.Container) []kubecontainer.Annotation {
+	annotations := []kubecontainer.Annotation{}
+	for _, claim := range container.Resources.Claims {
+		klog.V(4).Infof("GetCDIAnnotations: claim %s", claim)
+		for _, resource := range rc.actualStateOfWorld.GetPreparedResourcesForPod(cdi.UniquePodName(pod.UID)) {
+			klog.V(4).Infof("GetCDIAnnotations: prepared resource: %+v", resource)
+			if resource.ContainerClaimName == claim {
+				klog.V(4).Infof("GetCDIAnnotations: add resource annotations: %+v", resource.Annotations)
+				annotations = append(annotations, resource.Annotations...)
+			}
+		}
+	}
+	return annotations
 }

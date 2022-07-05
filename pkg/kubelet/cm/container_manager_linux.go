@@ -648,6 +648,11 @@ func (cm *containerManagerImpl) GetPluginRegistrationHandler() cache.PluginHandl
 // TODO: move the GetResources logic to PodContainerManager.
 func (cm *containerManagerImpl) GetResources(pod *v1.Pod, container *v1.Container) (*kubecontainer.RunContainerOptions, error) {
 	opts := &kubecontainer.RunContainerOptions{}
+	// Set container annotations from the CDI reconciler to
+	// trigger CDI injection
+	if cm.cdiReconciler != nil {
+		opts.Annotations = append(opts.Annotations, cm.cdiReconciler.GetCDIAnnotations(pod, container)...)
+	}
 	// Allocate should already be called during predicateAdmitHandler.Admit(),
 	// just try to fetch device runtime information from cached state here
 	devOpts, err := cm.deviceManager.GetDeviceRunContainerOptions(pod, container)

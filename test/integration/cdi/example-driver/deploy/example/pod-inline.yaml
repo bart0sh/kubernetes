@@ -14,12 +14,15 @@ metadata:
     name: pause
 spec:
   containers:
-  - name: pause
+  - name: pause-with-resource
     image: ubuntu:22.04
     command: ["sleep", "12345"]
     resources:
       claims:
       - resource
+  - name: pause-without-resource
+    image: ubuntu:22.04
+    command: ["sleep", "12345"]
   resourceClaims:
   - name: resource
     claim:

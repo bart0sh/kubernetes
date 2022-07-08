@@ -91,12 +91,12 @@ type ResourceToPrepare struct {
 // ResourceSpec is an internal representation of a resource
 // It contains attributes that are required to prepare and unprepare the resource.
 type ResourceSpec struct {
-	Name                 cdi.UniqueResourceName
-	PluginName           string
-	ContainerClaimName   string
-	ResourceClaimUUID    types.UID
-	AllocationAttributes map[string]string
-	Annotations          map[string]string
+	Name               cdi.UniqueResourceName
+	PluginName         string
+	ContainerClaimName string
+	ResourceClaimUUID  types.UID
+	ResourceHandle     string
+	Annotations        map[string]string
 }
 
 // NewDesiredStateOfWorld returns a new instance of DesiredStateOfWorld.

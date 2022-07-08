@@ -184,11 +184,11 @@ func (dswp *desiredStateOfWorldPopulator) createResourceSpec(
 	claimName := resourceclaim.Name(pod, &podResourceClaim)
 
 	containerClaimName := podResourceClaim.Name
-	if podResourceClaim.ResourceClaimName != nil {
-		containerClaimName = *podResourceClaim.ResourceClaimName
+	if podResourceClaim.Claim.ResourceClaimName != nil {
+		containerClaimName = *podResourceClaim.Claim.ResourceClaimName
 	}
 
-	resourceClaim, err := dswp.kubeClient.CdiV1alpha1().ResourceClaims(pod.Namespace).Get(context.TODO(), claimName, metav1.GetOptions{})
+	resourceClaim, err := dswp.kubeClient.CoreV1().ResourceClaims(pod.Namespace).Get(context.TODO(), claimName, metav1.GetOptions{})
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch ResourceClaim %s referenced by pod %s: %v", claimName, pod.Name, err)
@@ -197,12 +197,12 @@ func (dswp *desiredStateOfWorldPopulator) createResourceSpec(
 	driverName := resourceClaim.Status.DriverName
 
 	return &cache.ResourceSpec{
-		Name:                 GetUniqueResourceName(GetUniquePodName(pod), claimName),
-		PluginName:           driverName,
-		ContainerClaimName:   containerClaimName,
-		ResourceClaimUUID:    resourceClaim.GetUID(),
-		AllocationAttributes: resourceClaim.Status.Allocation.Attributes,
-		Annotations:          map[string]string{},
+		Name:               GetUniqueResourceName(GetUniquePodName(pod), claimName),
+		PluginName:         driverName,
+		ContainerClaimName: containerClaimName,
+		ResourceClaimUUID:  resourceClaim.GetUID(),
+		ResourceHandle:     resourceClaim.Status.Allocation.ResourceHandle,
+		Annotations:        map[string]string{},
 	}, nil
 }
 

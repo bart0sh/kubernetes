@@ -131,7 +131,7 @@ func (rc *reconciler) prepareResources() {
 					resourceToPrepare.Pod.Namespace,
 					resourceToPrepare.ResourceSpec.ResourceClaimUUID,
 					resourceToPrepare.ResourceSpec.Name,
-					resourceToPrepare.ResourceSpec.AllocationAttributes,
+					resourceToPrepare.ResourceSpec.ResourceHandle,
 				)
 				if err != nil {
 					klog.ErrorS(err, "NodePrepareResource failed", "pod", klog.KObj(resourceToPrepare.Pod))

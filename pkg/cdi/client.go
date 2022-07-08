@@ -44,7 +44,7 @@ type CDIClient interface {
 		namespace string,
 		claimUID types.UID,
 		claimName UniqueResourceName,
-		allocationAttributes map[string]string,
+		resourceHandle string,
 	) (*cdipbv1.NodePrepareResourceResponse, error)
 
 	NodeUnprepareResource(
@@ -128,14 +128,14 @@ func (r *cdiPluginClient) NodePrepareResource(
 	namespace string,
 	claimUID types.UID,
 	claimName UniqueResourceName,
-	allocationAttributes map[string]string,
+	resourceHandle string,
 ) (*cdipbv1.NodePrepareResourceResponse, error) {
 	klog.V(4).InfoS(
 		log("calling NodePrepareResource rpc"),
 		"namespace", namespace,
 		"claim UID", claimUID,
 		"claim name", claimName,
-		"allocation attributes", allocationAttributes)
+		"resource handle", resourceHandle)
 
 	if r.nodeV1ClientCreator == nil {
 		return nil, errors.New("failed to call NodePrepareResource. nodeV1ClientCreator is nil")
@@ -148,10 +148,10 @@ func (r *cdiPluginClient) NodePrepareResource(
 	defer closer.Close()
 
 	req := &cdipbv1.NodePrepareResourceRequest{
-		Namespace:  namespace,
-		ClaimUid:   string(claimUID),
-		ClaimName:  string(claimName),
-		Attributes: allocationAttributes,
+		Namespace:      namespace,
+		ClaimUid:       string(claimUID),
+		ClaimName:      string(claimName),
+		ResourceHandle: resourceHandle,
 	}
 
 	response, err := nodeClient.NodePrepareResource(ctx, req)

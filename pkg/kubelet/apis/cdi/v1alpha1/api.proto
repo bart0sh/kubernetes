@@ -47,9 +47,9 @@ message NodePrepareResourceRequest {
     // The name of the Resource claim (ResourceClaim.meta.Name)
     // This field is REQUIRED.
     string claim_name = 3;
-    // Allocation attributes (AllocationResult.Attributes)
+    // Resource handle (AllocationResult.ResourceHandle)
     // This field is REQUIRED.
-    map<string, string> attributes = 4;
+    string resource_handle = 4;
 }
 
 message NodePrepareResourceResponse {

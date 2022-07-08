@@ -48,6 +48,7 @@ const (
 	authorizationGroup     = "authorization.k8s.io"
 	autoscalingGroup       = "autoscaling"
 	batchGroup             = "batch"
+	cdiGroup               = "cdi.k8s.io"
 	certificatesGroup      = "certificates.k8s.io"
 	coordinationGroup      = "coordination.k8s.io"
 	discoveryGroup         = "discovery.k8s.io"

@@ -48,7 +48,6 @@ const (
 	authorizationGroup     = "authorization.k8s.io"
 	autoscalingGroup       = "autoscaling"
 	batchGroup             = "batch"
-	cdiGroup               = "cdi.k8s.io"
 	certificatesGroup      = "certificates.k8s.io"
 	coordinationGroup      = "coordination.k8s.io"
 	discoveryGroup         = "discovery.k8s.io"
@@ -178,7 +177,7 @@ func NodeRules() []rbacv1.PolicyRule {
 
 	// CDI Resource Claims
 	if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
-		nodePolicyRules = append(nodePolicyRules, rbacv1helpers.NewRule("get").Groups(cdiGroup).Resources("resourceclaims").RuleOrDie())
+		nodePolicyRules = append(nodePolicyRules, rbacv1helpers.NewRule("get").Groups(legacyGroup).Resources("resourceclaims").RuleOrDie())
 	}
 
 	return nodePolicyRules

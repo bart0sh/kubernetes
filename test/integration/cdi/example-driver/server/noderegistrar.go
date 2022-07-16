@@ -15,8 +15,8 @@ import (
 )
 
 type nodeRegistrarConfig struct {
-	cdiDriverName          string
-	cdiAddress             string
+	draDriverName          string
+	draAddress             string
 	pluginRegistrationPath string
 }
 type nodeRegistrar struct {
@@ -33,8 +33,8 @@ func (nr nodeRegistrar) nodeRegister() {
 	// When kubeletRegistrationPath is specified then driver-registrar ONLY acts
 	// as gRPC server which replies to registration requests initiated by kubelet's
 	// plugins watcher infrastructure. Node labeling is done by kubelet's csi code.
-	registrationServer := newRegistrationServer(nr.config.cdiDriverName, nr.config.cdiAddress, []string{"1.0.0"})
-	socketPath := buildSocketPath(nr.config.cdiDriverName, nr.config.pluginRegistrationPath)
+	registrationServer := newRegistrationServer(nr.config.draDriverName, nr.config.draAddress, []string{"1.0.0"})
+	socketPath := buildSocketPath(nr.config.draDriverName, nr.config.pluginRegistrationPath)
 	if err := cleanupSocketFile(socketPath); err != nil {
 		klog.Errorf("%+v", err)
 		os.Exit(1)
@@ -61,7 +61,7 @@ func (nr nodeRegistrar) nodeRegister() {
 	// Registers kubelet plugin watcher api.
 	registerapi.RegisterRegistrationServer(grpcServer, registrationServer)
 
-	go removeRegSocket(nr.config.cdiDriverName, nr.config.pluginRegistrationPath)
+	go removeRegSocket(nr.config.draDriverName, nr.config.pluginRegistrationPath)
 	// Starts service
 	if err := grpcServer.Serve(lis); err != nil {
 		klog.Errorf("Registration Server stopped serving: %v", err)

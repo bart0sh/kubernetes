@@ -4,11 +4,11 @@ import (
 	"fmt"
 )
 
-func RunServer(driverName, cdiAddress, pluginRegistrationPath string) error {
+func RunServer(driverName, draAddress, pluginRegistrationPath string) error {
 	//regsitrar will register driver with Kubelet
 	registrarConfig := nodeRegistrarConfig{
-		cdiDriverName:          driverName,
-		cdiAddress:             cdiAddress,
+		draDriverName:          driverName,
+		draAddress:             draAddress,
 		pluginRegistrationPath: pluginRegistrationPath,
 	}
 	registrar := newRegistrar(registrarConfig)
@@ -17,7 +17,7 @@ func RunServer(driverName, cdiAddress, pluginRegistrationPath string) error {
 	//driver will listen from a socket that deals with the call from Kubelet
 	driverConfig := nodeServerConfig{
 		driverName: driverName,
-		cdiAddress: cdiAddress,
+		draAddress: draAddress,
 	}
 	if driver, err := newExampleDriver(driverConfig); err != nil {
 		fmt.Printf("new example driver not created with the an error: %v", err)

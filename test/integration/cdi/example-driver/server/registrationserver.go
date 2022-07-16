@@ -31,7 +31,7 @@ func (e registrationServer) GetInfo(ctx context.Context, req *registerapi.InfoRe
 	klog.Infof("Received GetInfo call: %+v", req)
 
 	return &registerapi.PluginInfo{
-		Type:              registerapi.CDIPlugin,
+		Type:              registerapi.DRAPlugin,
 		Name:              e.driverName,
 		Endpoint:          e.endpoint,
 		SupportedVersions: e.version,

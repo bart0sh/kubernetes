@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"google.golang.org/grpc"
-	cdipbv1 "k8s.io/kubernetes/pkg/kubelet/apis/cdi/v1alpha1"
+	drapbv1 "k8s.io/kubernetes/pkg/kubelet/apis/dra/v1alpha1"
 )
 
 // NonBlocking server
@@ -18,7 +18,7 @@ type nonBlockingGRPCServer struct {
 	cleanup func()
 }
 
-func (s *nonBlockingGRPCServer) Start(endpoint string, ns cdipbv1.NodeServer) {
+func (s *nonBlockingGRPCServer) Start(endpoint string, ns drapbv1.NodeServer) {
 
 	s.wg.Add(1)
 
@@ -39,7 +39,7 @@ func (s *nonBlockingGRPCServer) ForceStop() {
 	s.cleanup()
 }
 
-func (s *nonBlockingGRPCServer) serve(ep string, ns cdipbv1.NodeServer) {
+func (s *nonBlockingGRPCServer) serve(ep string, ns drapbv1.NodeServer) {
 	listener, cleanup, err := listen(ep)
 	if err != nil {
 		fmt.Printf("Failed to listen: %v", err)
@@ -51,7 +51,7 @@ func (s *nonBlockingGRPCServer) serve(ep string, ns cdipbv1.NodeServer) {
 	s.cleanup = cleanup
 
 	if ns != nil {
-		cdipbv1.RegisterNodeServer(server, ns)
+		drapbv1.RegisterNodeServer(server, ns)
 	}
 
 	server.Serve(listener)

@@ -33,7 +33,7 @@ require (
 	k8s.io/klog/v2 v2.70.1
 	k8s.io/mount-utils v0.0.0
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
-	sigs.k8s.io/yaml v1.2.0
+	sigs.k8s.io/yaml v1.3.0
 )
 
 require (
@@ -101,6 +101,7 @@ require (
 )
 
 replace (
+	github.com/fsnotify/fsnotify => github.com/fsnotify/fsnotify v1.4.9
 	k8s.io/api => ../api
 	k8s.io/apimachinery => ../apimachinery
 	k8s.io/apiserver => ../apiserver
@@ -112,4 +113,5 @@ replace (
 	k8s.io/csi-translation-lib => ../csi-translation-lib
 	k8s.io/legacy-cloud-providers => ../legacy-cloud-providers
 	k8s.io/mount-utils => ../mount-utils
+	sigs.k8s.io/yaml => sigs.k8s.io/yaml v1.2.0
 )

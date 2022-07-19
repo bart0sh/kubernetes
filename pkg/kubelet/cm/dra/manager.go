@@ -149,9 +149,9 @@ func (m *ManagerImpl) prepareContainerResources(pod *v1.Pod, container *v1.Conta
 		}
 
 		resourceName := fmt.Sprintf("%s-%s", pod.UID, claimName)
-		response, err := client.NodePrepareResource(context.Background(), pod.Namespace, resourceClaim.GetUID(), resourceName, resourceClaim.Status.Allocation.ResourceHandle)
+		response, err := client.NodePrepareResource(context.Background(), pod.Namespace, resourceClaim.UID, resourceName, resourceClaim.Status.Allocation.ResourceHandle)
 		if err != nil {
-			return fmt.Errorf("NodePrepareResource failed, pod: %s, err: %+v", pod.Name, err)
+			return fmt.Errorf("NodePrepareResource failed, pod: %s, claim UID: %s, resource: %s, resource handle: %s, err: %+v", pod.Name, resourceClaim.UID, resourceName, resourceClaim.Status.Allocation.ResourceHandle, err)
 		}
 		klog.V(3).Infof("NodePrepareResource: response: %+v", response)
 
@@ -182,8 +182,11 @@ func (m *ManagerImpl) prepareContainerResources(pod *v1.Pod, container *v1.Conta
 			container.Name,
 			containerClaimName,
 			&resource{
+				driverName:           driverName,
 				name:                 resourceName,
+				claimUID:             resourceClaim.UID,
 				resourcePluginClient: client,
+				cdiDevice:            response.CdiDevice,
 				annotations:          annotations,
 			})
 	}
@@ -247,4 +250,29 @@ func (m *ManagerImpl) GetCDIAnnotations(pod *v1.Pod, container *v1.Container) []
 		annotations = append(annotations, resource.annotations...)
 	}
 	return annotations
+}
+
+func (m *ManagerImpl) UnprepareResources(pod *v1.Pod) error {
+	m.Lock()
+	defer m.Unlock()
+
+	// Call NodeUnprepareResource RPC for every pod resource
+	// TODO: call this asynchronously ?
+	for _, resource := range m.podResources.getPodResources(pod.UID) {
+		client, err := dra.NewDRAPluginClient(resource.driverName)
+		if err != nil || client == nil {
+			return fmt.Errorf("failed to get DRA Plugin client for plugin name %s, err=%+v", resource.driverName, err)
+		}
+
+		response, err := client.NodeUnprepareResource(context.Background(), pod.Namespace, resource.claimUID, resource.name, resource.cdiDevice)
+		if err != nil {
+			return fmt.Errorf("NodeUnprepareResource failed, pod: %s, claim UID: %s, resource: %s, CDI devices: %s, err: %+v", pod.Name, resource.claimUID, resource.name, resource.cdiDevice, err)
+		}
+		klog.V(3).Infof("NodeUnprepareResource: response: %+v", response)
+	}
+
+	// delete pod resources from the cache
+	m.podResources.delete([]string{string(pod.UID)})
+
+	return nil
 }

@@ -28,12 +28,22 @@ import (
 // resource contains resource attributes required
 // to prepare and unprepare the resource
 type resource struct {
+	// name of the DRA driver
+	driverName string
+
 	// name is an unique resource name
 	name string
+
+	// claimUID is an UID of the resource claim
+	claimUID types.UID
 
 	// resourcePluginClient is an instance of the GRPC DRA client
 	// that's used to query node resource plugin
 	resourcePluginClient dra.DRAClient
+
+	// cdiDevice is a list of CDI devices returned by the
+	// GRPC API call NodePrepareResource
+	cdiDevice []string
 
 	// annotations is a list of container annotations associated with
 	// a prepared resource
@@ -46,9 +56,7 @@ type podResources struct {
 	resources map[types.UID]map[string]map[string]*resource
 }
 
-// NewPodDevices is a function that returns object of podDevices type with its own guard
-// RWMutex and a map where key is a pod UID and value contains
-// container devices information of type containerDevices.
+// newPodResources is a function that returns object of podResources
 func newPodResources() *podResources {
 	return &podResources{
 		resources: make(map[types.UID]map[string]map[string]*resource),
@@ -71,6 +79,7 @@ func (pres *podResources) insert(podUID types.UID, contName, resName string, res
 func (pres *podResources) pods() sets.String {
 	pres.RLock()
 	defer pres.RUnlock()
+
 	ret := sets.NewString()
 	for podUID := range pres.resources {
 		ret.Insert(string(podUID))
@@ -89,6 +98,20 @@ func (pres *podResources) delete(podUIDs []string) {
 func (pres *podResources) prepared(podUID types.UID, contName, resName string) bool {
 	res := pres.get(podUID, contName, resName)
 	return res != nil
+}
+
+func (pres *podResources) getPodResources(podUID types.UID) []*resource {
+	pres.Lock()
+	defer pres.Unlock()
+
+	resources := []*resource{}
+	for contName := range pres.resources[podUID] {
+		for _, resource := range pres.resources[podUID][contName] {
+			resources = append(resources, resource)
+		}
+	}
+
+	return resources
 }
 
 func (pres *podResources) get(podUID types.UID, contName, resName string) *resource {

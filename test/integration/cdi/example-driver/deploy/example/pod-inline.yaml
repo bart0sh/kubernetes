@@ -16,13 +16,13 @@ spec:
   containers:
   - name: pause-with-resource
     image: ubuntu:22.04
-    command: ["sleep", "12345"]
+    command: ["sh", "-c", "ls -la /dev/tty8 ; set |grep envVar2"]
     resources:
       claims:
       - resource
   - name: pause-without-resource
     image: ubuntu:22.04
-    command: ["sleep", "12345"]
+    command: ["sh", "-c", "ls -la /dev/tty* ; set"]
   resourceClaims:
   - name: resource
     claim:

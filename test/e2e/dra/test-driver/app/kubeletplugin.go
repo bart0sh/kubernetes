@@ -117,6 +117,14 @@ func (ex *ExamplePlugin) IsRegistered() bool {
 	return status.PluginRegistered
 }
 
+// Reset resets plugin registration status
+func (ex *ExamplePlugin) Reset() {
+	status := ex.d.RegistrationStatus()
+	if status != nil {
+		status.Reset()
+	}
+}
+
 // NodePrepareResource ensures that the CDI file for the claim exists. It uses
 // a deterministic name to simplify NodeUnprepareResource (no need to remember
 // or discover the name) and idempotency (when called again, the file simply

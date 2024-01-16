@@ -110,15 +110,20 @@ func (h *RegistrationHandler) RegisterPlugin(pluginName string, endpoint string,
 		return err
 	}
 
-	// Storing endpoint of newly registered DRA Plugin into the map, where plugin name will be the key
-	// all other DRA components will be able to get the actual socket of DRA plugins by its name.
-	// By default we assume the supported plugin version is v1alpha3
-	draPlugins.add(pluginName, &plugin{
+	pluginInstance := &plugin{
 		conn:                    nil,
 		endpoint:                endpoint,
 		version:                 v1alpha3Version,
 		highestSupportedVersion: highestSupportedVersion,
-	})
+	}
+
+	// Storing endpoint of newly registered DRA Plugin into the map, where plugin name will be the key
+	// all other DRA components will be able to get the actual socket of DRA plugins by its name.
+	// By default we assume the supported plugin version is v1alpha3
+	draPlugins.add(pluginName, pluginInstance)
+
+	// Create and monitor ResourceCapacity stream
+	go pluginInstance.processResourceCapacityStream(pluginName)
 
 	return nil
 }

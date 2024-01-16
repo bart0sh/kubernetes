@@ -842,6 +842,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 			s.FailSwapOn,
 			kubeDeps.Recorder,
 			kubeDeps.KubeClient,
+			nodeName,
 		)
 
 		if err != nil {

@@ -23,6 +23,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/resourceclaim"
 	"k8s.io/klog/v2"
@@ -44,8 +45,11 @@ type ManagerImpl struct {
 }
 
 // NewManagerImpl creates a new manager.
-func NewManagerImpl(kubeClient clientset.Interface, stateFileDirectory string) (*ManagerImpl, error) {
+func NewManagerImpl(kubeClient kubernetes.Interface, stateFileDirectory string, nodeName types.NodeName) (*ManagerImpl, error) {
 	klog.V(2).InfoS("Creating DRA manager")
+
+	// Set kubeClient for the client module
+	dra.SetKubeClient(kubeClient, nodeName)
 
 	claimInfoCache, err := newClaimInfoCache(stateFileDirectory, draManagerStateFileName)
 	if err != nil {

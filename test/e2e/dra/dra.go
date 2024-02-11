@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
+	counterv1alpha1 "k8s.io/dynamic-resource-allocation/apis/counter/v1alpha1"
 	"k8s.io/dynamic-resource-allocation/controller"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/features"
@@ -267,6 +268,36 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 			for host, plugin := range b.driver.Nodes {
 				gomega.Expect(plugin.GetPreparedResources()).Should(gomega.BeEmpty(), "not claims should be prepared on host %s while pod is running", host)
 			}
+		})
+
+		ginkgo.It("must call ResourceCapacity GRPC", func(ctx context.Context) {
+			m := MethodInstance{driver.Nodenames()[0], ResourceCapacityMethod}
+			ginkgo.By("wait for ResourceCapacity call")
+			gomega.Eventually(ctx, func(ctx context.Context) error {
+				if driver.CallCount(m) == 0 {
+					return errors.New("ResourceCapacity not called yet")
+				}
+				return nil
+			}).WithTimeout(podStartTimeout).Should(gomega.Succeed())
+
+			ginkgo.By("check if NodeResourceCapacities object exists on the API server")
+			resourceClient := f.ClientSet.ResourceV1alpha2().NodeResourceCapacities()
+			nrcName := nodes.NodeNames[0] + "-resourcecapacity"
+			ginkgo.DeferCleanup(func(ctx context.Context) {
+				err := resourceClient.Delete(ctx, nrcName, metav1.DeleteOptions{})
+				framework.ExpectNoError(err, "delete NodeResourceCapacity")
+			})
+			gomega.Eventually(ctx, func(ctx context.Context) error {
+				nrcObj, err := resourceClient.Get(ctx, nrcName, metav1.GetOptions{})
+				if apierrors.IsNotFound(err) {
+					return errors.New("ResourceCapacity object doesn't exist")
+				}
+				gomega.Expect(nrcObj.NodeName).To(gomega.Equal(nodes.NodeNames[0]))
+				gomega.Expect(nrcObj.Instances[0].ID).To(gomega.Equal("someID"))
+				gomega.Expect(nrcObj.Instances[0].Kind).To(gomega.Equal("Capacity"))
+				gomega.Expect(nrcObj.Instances[0].APIVersion).To(gomega.Equal(counterv1alpha1.SchemeGroupVersion.String()))
+				return nil
+			}).WithTimeout(time.Second * 20).Should(gomega.Succeed())
 		})
 	})
 

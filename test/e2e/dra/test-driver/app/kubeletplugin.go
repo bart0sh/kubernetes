@@ -27,6 +27,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	serializerjson "k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/dynamic-resource-allocation/apis/counter"
@@ -79,7 +80,7 @@ type ClaimID struct {
 	UID  string
 }
 
-var _ drapbv1alpha2.NodeServer = &ExamplePlugin{}
+var _ drapbv1alpha3.NodeServer = &ExamplePlugin{}
 
 // getJSONFilePath returns the absolute path where CDI file is/should be.
 func (ex *ExamplePlugin) getJSONFilePath(claimUID string) string {
@@ -335,6 +336,34 @@ func (ex *ExamplePlugin) NodeUnprepareResources(ctx context.Context, req *drapbv
 		}
 	}
 	return resp, nil
+}
+
+func (ex *ExamplePlugin) ResourceCapacity(req *drapbv1alpha3.ResourceCapacityRequest, stream drapbv1alpha3.Node_ResourceCapacityServer) error {
+	capacity := &counterv1alpha1.Capacity{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:  "abc",
+			Name: "thingies",
+		},
+		Count: 100,
+	}
+	cap, err := json.Marshal(capacity)
+	if err != nil {
+		return err
+	}
+	instance := &drapbv1alpha3.NodeResourceInstance{
+		Id: "someID",
+		Typemeta: &runtime.TypeMeta{
+			Kind:       "Capacity",
+			APIVersion: counterv1alpha1.SchemeGroupVersion.String(),
+		},
+		Data: &runtime.RawExtension{Raw: cap},
+	}
+	resp := &drapbv1alpha3.ResourceCapacityResponse{
+		Node:      ex.nodeName,
+		Driver:    ex.driverName,
+		Instances: []*drapbv1alpha3.NodeResourceInstance{instance},
+	}
+	return stream.Send(resp)
 }
 
 func (ex *ExamplePlugin) GetPreparedResources() []ClaimID {

@@ -19,7 +19,6 @@ package dra
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -35,14 +34,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	resourcev1alpha2 "k8s.io/api/resource/v1alpha2"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
-	counterv1alpha1 "k8s.io/dynamic-resource-allocation/apis/counter/v1alpha1"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 	testdriverv1alpha1 "k8s.io/kubernetes/test/e2e/dra/test-driver/api/v1alpha1"
@@ -60,6 +55,7 @@ const (
 	NodePrepareResourcesMethod   = "/v1alpha3.Node/NodePrepareResources"
 	NodeUnprepareResourceMethod  = "/v1alpha2.Node/NodeUnprepareResource"
 	NodeUnprepareResourcesMethod = "/v1alpha3.Node/NodeUnprepareResources"
+	ResourceCapacityMethod       = "/v1alpha3.Node/ResourceCapacity"
 )
 
 type Nodes struct {
@@ -196,40 +192,6 @@ func (d *Driver) SetUp(nodes *Nodes, resources app.Resources) {
 		if d.numericParameters {
 			if !resources.NodeLocal {
 				ginkgo.Fail("internal error: can only simulate node-local resources with numeric parameters")
-			}
-			// TODO: implement NodeResourceCapacity publishing in kubelet and remove this.
-			capacity := &counterv1alpha1.Capacity{
-				ObjectMeta: metav1.ObjectMeta{
-					UID:  "abc",
-					Name: "thingies",
-				},
-				Count: resources.MaxAllocations,
-			}
-			instance, err := json.Marshal(capacity)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred(), "encode node capacity")
-			for _, nodeName := range nodes.NodeNames {
-				nodeResourceCapacity := &resourcev1alpha2.NodeResourceCapacity{
-					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: nodeName + "-",
-						// Normally the node would be the owner. Gets skipped here for simplicity's sake.
-					},
-					NodeName:   nodeName,
-					DriverName: d.Name,
-					Instances: []resourcev1alpha2.NodeResourceInstance{
-						{
-							Kind:       "Capacity",
-							APIVersion: counterv1alpha1.SchemeGroupVersion.String(),
-							Data:       runtime.RawExtension{Raw: instance},
-						},
-					},
-				}
-				nodeResourceCapacity, err := d.f.ClientSet.ResourceV1alpha2().NodeResourceCapacities().Create(ctx, nodeResourceCapacity, metav1.CreateOptions{})
-				gomega.Expect(err).To(gomega.Succeed(), "create NodeResourceCapacity")
-				ginkgo.DeferCleanup(func(ctx context.Context) {
-					if err := d.f.ClientSet.ResourceV1alpha2().NodeResourceCapacities().Delete(ctx, nodeResourceCapacity.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-						gomega.Expect(err).To(gomega.Succeed(), "delete NodeResourceCapacity")
-					}
-				})
 			}
 		}
 	} else {

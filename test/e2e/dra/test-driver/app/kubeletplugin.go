@@ -138,6 +138,7 @@ func StartPlugin(logger klog.Logger, cdiDir, driverName string, nodeName string,
 		kubeletplugin.Logger(logger),
 		kubeletplugin.DriverName(driverName),
 		kubeletplugin.GRPCInterceptor(ex.recordGRPCCall),
+		kubeletplugin.GRPCStreamInterceptor(ex.recordGRPCStream),
 	)
 	d, err := kubeletplugin.Start(ex, opts...)
 	if err != nil {
@@ -364,6 +365,25 @@ func (ex *ExamplePlugin) recordGRPCCall(ctx context.Context, req interface{}, in
 	ex.mutex.Unlock()
 
 	return call.Response, call.Err
+}
+
+func (ex *ExamplePlugin) recordGRPCStream(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	call := GRPCCall{
+		FullMethod: info.FullMethod,
+	}
+	ex.mutex.Lock()
+	ex.gRPCCalls = append(ex.gRPCCalls, call)
+	index := len(ex.gRPCCalls) - 1
+	ex.mutex.Unlock()
+
+	// We don't hold the mutex here to allow concurrent calls.
+	call.Err = handler(srv, stream)
+
+	ex.mutex.Lock()
+	ex.gRPCCalls[index] = call
+	ex.mutex.Unlock()
+
+	return call.Err
 }
 
 func (ex *ExamplePlugin) GetGRPCCalls() []GRPCCall {

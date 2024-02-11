@@ -318,6 +318,9 @@ func (d *Driver) SetUp(nodes *Nodes, resources app.Resources) {
 			kubeletplugin.GRPCInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 				return d.interceptor(nodename, ctx, req, info, handler)
 			}),
+			kubeletplugin.GRPCStreamInterceptor(func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+				return d.streamInterceptor(nodename, srv, ss, info, handler)
+			}),
 			kubeletplugin.PluginListener(listen(ctx, d.f, pod.Name, "plugin", 9001)),
 			kubeletplugin.RegistrarListener(listen(ctx, d.f, pod.Name, "registrar", 9000)),
 			kubeletplugin.KubeletPluginSocketPath(draAddr),
@@ -404,6 +407,19 @@ func (d *Driver) interceptor(nodename string, ctx context.Context, req interface
 	}
 
 	return handler(ctx, req)
+}
+
+func (d *Driver) streamInterceptor(nodename string, srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	m := MethodInstance{nodename, info.FullMethod}
+	d.callCounts[m]++
+	if d.fail[m] {
+		return errors.New("injected error")
+	}
+
+	return handler(srv, stream)
 }
 
 func (d *Driver) Fail(m MethodInstance, injectError bool) {

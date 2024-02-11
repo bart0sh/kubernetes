@@ -193,6 +193,34 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 				gomega.Expect(plugin.GetPreparedResources()).Should(gomega.BeEmpty(), "not claims should be prepared on host %s while pod is running", host)
 			}
 		})
+
+		ginkgo.It("must create NodeResourceSlice", func(ctx context.Context) {
+			m := MethodInstance{driver.Nodenames()[0], NodeResourcesMethod}
+			ginkgo.By("wait for NodeResources call")
+			gomega.Eventually(ctx, func() error {
+				if driver.CallCount(m) == 0 {
+					return errors.New("NodeResources not called yet")
+				}
+				return nil
+			}).WithTimeout(podStartTimeout).Should(gomega.Succeed())
+
+			ginkgo.By("check if NodeResourceSlice object exists on the API server")
+			resourceClient := f.ClientSet.ResourceV1alpha2().NodeResourceSlices()
+			name := nodes.NodeNames[0] + "-" + driver.Name + "-slice" // TODO: detect name dynamically
+			ginkgo.DeferCleanup(func(ctx context.Context) {
+				err := resourceClient.Delete(ctx, name, metav1.DeleteOptions{})
+				framework.ExpectNoError(err, "delete NodeResourceCapacity")
+			})
+			gomega.Eventually(ctx, func(ctx context.Context) (*resourcev1alpha2.NodeResourceSlice, error) {
+				slice, err := resourceClient.Get(ctx, name, metav1.GetOptions{})
+				return slice, err
+			}).WithTimeout(time.Second * 20).Should(gomega.And(
+				// TODO: validate ownerref
+				gomega.HaveField("NodeName", gomega.Equal(nodes.NodeNames[0])),
+				gomega.HaveField("DriverName", gomega.Equal(driver.Name)),
+				gomega.HaveField("NodeResourceModel.NamedResources", gomega.Not(gomega.BeNil())),
+			))
+		})
 	})
 
 	driverTest := func(parameterMode parameterMode) {

@@ -27,6 +27,8 @@ import (
 
 	"google.golang.org/grpc"
 
+	namedresourcesapi "k8s.io/api/resource/structured/namedresources/v1alpha1"
+	resourceapi "k8s.io/api/resource/v1alpha2"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
@@ -35,6 +37,7 @@ import (
 )
 
 type ExamplePlugin struct {
+	stopCh  <-chan struct{}
 	logger  klog.Logger
 	d       kubeletplugin.DRAPlugin
 	fileOps FileOperations
@@ -91,7 +94,8 @@ type FileOperations struct {
 }
 
 // StartPlugin sets up the servers that are necessary for a DRA kubelet plugin.
-func StartPlugin(logger klog.Logger, cdiDir, driverName string, nodeName string, fileOps FileOperations, opts ...kubeletplugin.Option) (*ExamplePlugin, error) {
+func StartPlugin(ctx context.Context, cdiDir, driverName string, nodeName string, fileOps FileOperations, opts ...kubeletplugin.Option) (*ExamplePlugin, error) {
+	logger := klog.FromContext(ctx)
 	if fileOps.Create == nil {
 		fileOps.Create = func(name string, content []byte) error {
 			return os.WriteFile(name, content, os.FileMode(0644))
@@ -106,6 +110,7 @@ func StartPlugin(logger klog.Logger, cdiDir, driverName string, nodeName string,
 		}
 	}
 	ex := &ExamplePlugin{
+		stopCh:     ctx.Done(),
 		logger:     logger,
 		fileOps:    fileOps,
 		cdiDir:     cdiDir,
@@ -329,6 +334,33 @@ func (ex *ExamplePlugin) NodeUnprepareResources(ctx context.Context, req *drapbv
 		}
 	}
 	return resp, nil
+}
+
+func (ex *ExamplePlugin) NodeResources(req *drapbv1alpha3.NodeResourcesRequest, stream drapbv1alpha3.Node_NodeResourcesServer) error {
+	// TODO: parameterize ExamplePlugin so that it knows about maximum capacity and tracks instances.
+	resp := &drapbv1alpha3.NodeResourcesResponse{
+		Resources: []*resourceapi.NodeResourceModel{
+			&resourceapi.NodeResourceModel{
+				NamedResources: &namedresourcesapi.Resources{
+					Instances: []namedresourcesapi.Instance{
+						{Name: "instance-0"},
+					},
+				},
+			},
+		},
+	}
+
+	ex.logger.Info("Sending NodeResourcesResponse", "response", resp)
+	if err := stream.Send(resp); err != nil {
+		return err
+	}
+
+	// TODO: Keep the stream open until the test is done.
+	// TODO: test sending more updates later
+	// <-ex.stopCh
+	// But doing so blocks using the plugin?
+
+	return nil
 }
 
 func (ex *ExamplePlugin) GetPreparedResources() []ClaimID {

@@ -43,6 +43,12 @@ func (f *fakeV1alpha3GRPCServer) NodeUnprepareResource(ctx context.Context, in *
 	return &drapbv1alpha3.NodeUnprepareResourcesResponse{}, nil
 }
 
+func (f *fakeV1alpha3GRPCServer) ResourceCapacity(req *drapbv1alpha3.ResourceCapacityRequest, srv drapbv1alpha3.Node_ResourceCapacityServer) error {
+	srv.Send(&drapbv1alpha3.ResourceCapacityResponse{Node: "Node1", Driver: "Driver1"})
+	srv.Send(&drapbv1alpha3.ResourceCapacityResponse{Node: "Node2", Driver: "Driver2"})
+	return nil
+}
+
 type fakeV1alpha2GRPCServer struct {
 	drapbv1alpha2.UnimplementedNodeServer
 }
@@ -284,6 +290,77 @@ func TestNodeUnprepareResource(t *testing.T) {
 			_, err = client.NodeUnprepareResources(context.TODO(), test.request)
 			if err != nil {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestResourceCapacity(t *testing.T) {
+	for _, test := range []struct {
+		description   string
+		serverSetup   func(string) (string, tearDown, error)
+		serverVersion string
+		request       *drapbv1alpha3.ResourceCapacityRequest
+		responses     []*drapbv1alpha3.ResourceCapacityResponse
+	}{
+		{
+			description:   "server supports ResourceCapacity API",
+			serverSetup:   setupFakeGRPCServer,
+			serverVersion: v1alpha3Version,
+			request:       &drapbv1alpha3.ResourceCapacityRequest{},
+			responses: []*drapbv1alpha3.ResourceCapacityResponse{
+				{Node: "Node1", Driver: "Driver1"},
+				{Node: "Node2", Driver: "Driver2"},
+			},
+		},
+		{
+			description:   "server doesn't support ResourceCapacity API",
+			serverSetup:   setupFakeGRPCServer,
+			serverVersion: v1alpha2Version,
+			request:       new(drapbv1alpha3.ResourceCapacityRequest),
+		},
+	} {
+		t.Run(test.description, func(t *testing.T) {
+			addr, teardown, err := setupFakeGRPCServer(test.serverVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer teardown()
+
+			p := &plugin{
+				endpoint: addr,
+				version:  v1alpha3Version,
+			}
+
+			conn, err := p.getOrCreateGRPCConn()
+			defer func() {
+				err := conn.Close()
+				if err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			draPlugins.add("dummy-plugin", p)
+			defer draPlugins.delete("dummy-plugin")
+
+			client, err := NewDRAPluginClient("dummy-plugin")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			stream, err := client.ResourceCapacity(context.Background(), test.request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, response := range test.responses {
+				resp, err := stream.Recv()
+				if err != nil {
+					t.Fatal(err)
+				}
+				assert.Equal(t, response, resp)
 			}
 		})
 	}

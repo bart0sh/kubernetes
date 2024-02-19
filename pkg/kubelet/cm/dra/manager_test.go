@@ -31,6 +31,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	resourcev1alpha2 "k8s.io/api/resource/v1alpha2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/dynamic-resource-allocation/resourceclaim"
@@ -141,25 +142,27 @@ func TestNewManagerImpl(t *testing.T) {
 	for _, test := range []struct {
 		description        string
 		stateFileDirectory string
+		nodeName           types.NodeName
 		wantErr            bool
 	}{
 		{
 			description:        "invalid directory path",
 			stateFileDirectory: "",
+			nodeName:           "node1",
 			wantErr:            true,
 		},
 		{
 			description:        "valid directory path",
 			stateFileDirectory: t.TempDir(),
+			nodeName:           "node1",
 		},
 	} {
 		t.Run(test.description, func(t *testing.T) {
-			manager, err := NewManagerImpl(kubeClient, test.stateFileDirectory, "worker")
+			manager, err := NewManagerImpl(kubeClient, test.stateFileDirectory, test.nodeName)
 			if test.wantErr {
 				assert.Error(t, err)
 				return
 			}
-
 			assert.NoError(t, err)
 			assert.NotNil(t, manager.cache)
 			assert.NotNil(t, manager.kubeClient)
@@ -173,6 +176,7 @@ func TestGetResources(t *testing.T) {
 
 	for _, test := range []struct {
 		description string
+		nodeName    types.NodeName
 		container   *v1.Container
 		pod         *v1.Pod
 		claimInfo   *ClaimInfo
@@ -180,6 +184,7 @@ func TestGetResources(t *testing.T) {
 	}{
 		{
 			description: "claim info with annotations",
+			nodeName:    "node1",
 			container: &v1.Container{
 				Name: "test-container",
 				Resources: v1.ResourceRequirements{
@@ -224,6 +229,7 @@ func TestGetResources(t *testing.T) {
 		},
 		{
 			description: "claim info without annotations",
+			nodeName:    "node1",
 			container: &v1.Container{
 				Name: "test-container",
 				Resources: v1.ResourceRequirements{
@@ -260,6 +266,7 @@ func TestGetResources(t *testing.T) {
 		},
 		{
 			description: "no claim info",
+			nodeName:    "node1",
 			container: &v1.Container{
 				Name: "test-container",
 				Resources: v1.ResourceRequirements{
@@ -287,7 +294,7 @@ func TestGetResources(t *testing.T) {
 		},
 	} {
 		t.Run(test.description, func(t *testing.T) {
-			manager, err := NewManagerImpl(kubeClient, t.TempDir(), "worker")
+			manager, err := NewManagerImpl(kubeClient, t.TempDir(), test.nodeName)
 			assert.NoError(t, err)
 
 			if test.claimInfo != nil {

@@ -24,6 +24,7 @@ import (
 	resourceapi "k8s.io/api/resource/v1alpha2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/resourceclaim"
 	"k8s.io/klog/v2"
@@ -46,19 +47,26 @@ type ManagerImpl struct {
 
 // NewManagerImpl creates a new manager.
 func NewManagerImpl(kubeClient clientset.Interface, stateFileDirectory string, nodeName types.NodeName) (*ManagerImpl, error) {
-	klog.V(2).InfoS("Creating DRA manager")
+	ctx := context.Background()
+	logger := klog.FromContext(ctx)
+	logger.V(2).Info("Creating DRA manager")
 
 	claimInfoCache, err := newClaimInfoCache(stateFileDirectory, draManagerStateFileName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create claimInfo cache: %+v", err)
 	}
 
-	manager := &ManagerImpl{
+	// Start monitoriing NodeResourceSlices objects
+	informerManager, err := NewInformerManager(ctx, nodeName, kubeClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create NodeResourceSlices Informer manager: %+v", err)
+	}
+	informerManager.Start(ctx, wait.NeverStop)
+
+	return &ManagerImpl{
 		cache:      claimInfoCache,
 		kubeClient: kubeClient,
-	}
-
-	return manager, nil
+	}, nil
 }
 
 // PrepareResources attempts to prepare all of the required resource

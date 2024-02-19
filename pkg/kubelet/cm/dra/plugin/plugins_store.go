@@ -41,6 +41,13 @@ func (s *pluginsStore) get(pluginName string) *plugin {
 	return s.store[pluginName]
 }
 
+func IsRegistered(pluginName string) bool {
+	draPlugins.RLock()
+	defer draPlugins.RUnlock()
+	_, ok := draPlugins.store[pluginName]
+	return ok
+}
+
 // Set lets you save a DRA Plugin to the list and give it a specific name.
 // This method is protected by a mutex.
 func (s *pluginsStore) add(pluginName string, p *plugin) {

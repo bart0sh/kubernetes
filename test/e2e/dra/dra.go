@@ -209,7 +209,7 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 			name := nodes.NodeNames[0] + "-" + driver.Name + "-slice" // TODO: detect name dynamically
 			ginkgo.DeferCleanup(func(ctx context.Context) {
 				err := resourceClient.Delete(ctx, name, metav1.DeleteOptions{})
-				framework.ExpectNoError(err, "delete NodeResourceCapacity")
+				framework.ExpectNoError(err, "delete NodeResourceSlice")
 			})
 			gomega.Eventually(ctx, func(ctx context.Context) (*resourcev1alpha2.NodeResourceSlice, error) {
 				slice, err := resourceClient.Get(ctx, name, metav1.GetOptions{})
@@ -220,6 +220,27 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 				gomega.HaveField("DriverName", gomega.Equal(driver.Name)),
 				gomega.HaveField("NodeResourceModel.NamedResources", gomega.Not(gomega.BeNil())),
 			))
+		})
+
+		ginkgo.It("must delete orphaned NodeResourceSlice object", func(ctx context.Context) {
+			ginkgo.By("create NodeResourceSlice that don't belong to any registered driver")
+			slice := b.nodeResourceSlice(nodes.NodeNames[0], 1)
+			slice.DriverName = "notRegistered"
+			resourceClient := f.ClientSet.ResourceV1alpha2().NodeResourceSlices()
+			slice, err := resourceClient.Create(ctx, slice, metav1.CreateOptions{})
+			framework.ExpectNoError(err, "create NodeResourceSlice")
+			ginkgo.DeferCleanup(func(ctx context.Context) {
+				resourceClient.Delete(ctx, slice.Name, metav1.DeleteOptions{})
+			})
+
+			ginkgo.By("wait until orphaned NodeResourceSlice is removed")
+			gomega.Eventually(ctx, func(ctx context.Context) error {
+				nrc, err := resourceClient.Get(ctx, slice.Name, metav1.GetOptions{})
+				if apierrors.IsNotFound(err) {
+					return nil
+				}
+				return fmt.Errorf("ResourceSlice object still exists: %+v", nrc)
+			}).WithTimeout(time.Second * 30).Should(gomega.Succeed())
 		})
 	})
 

@@ -63,29 +63,29 @@ func NewInformerManager(ctx context.Context, nodeName types.NodeName, client cli
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			nrc, ok := obj.(*resourcev1alpha2.NodeResourceSlice)
+			slice, ok := obj.(*resourcev1alpha2.NodeResourceSlice)
 			if !ok {
 				return
 			}
-			logger.V(2).Info("NodeResourceSlice add", "obj", nrc)
+			logger.V(2).Info("NodeResourceSlice add", "obj", slice)
 		},
 		UpdateFunc: func(old, new any) {
-			nrco, ok := old.(*resourcev1alpha2.NodeResourceSlice)
+			sliceOld, ok := old.(*resourcev1alpha2.NodeResourceSlice)
 			if !ok {
 				return
 			}
-			nrcn, ok := new.(*resourcev1alpha2.NodeResourceSlice)
+			sliceNew, ok := new.(*resourcev1alpha2.NodeResourceSlice)
 			if !ok {
 				return
 			}
-			logger.V(2).Info("NodeResourceSlice update", "old", nrco, "new", nrcn)
+			logger.V(2).Info("NodeResourceSlice update", "old", sliceOld, "new", sliceNew)
 		},
 		DeleteFunc: func(obj any) {
-			nrc, ok := obj.(*resourcev1alpha2.NodeResourceSlice)
+			slice, ok := obj.(*resourcev1alpha2.NodeResourceSlice)
 			if !ok {
 				return
 			}
-			logger.V(2).Info("NodeResourceSlice delete", "obj", nrc)
+			logger.V(2).Info("NodeResourceSlice delete", "obj", slice)
 		},
 	})
 

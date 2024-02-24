@@ -920,7 +920,6 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 							selectedNode string),
 					) {
 						allocateWrapper2(ctx, claimAllocations, selectedNode, handler)
-						return
 					},
 				}
 			})
@@ -978,7 +977,6 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 						<-blockClaim.Done()
 					}
 					handler(ctx, claimAllocations, selectedNode)
-					return
 				}
 
 				b.create(ctx, parameters1, parameters2, pod1claim1, pod1claim2, pod1)

@@ -42,15 +42,15 @@ const (
 )
 
 // InformerManager caches NodeResourceSlice API objects, and provides accessors to the Kubelet.
-type InformerManager struct {
+type informerManager struct {
 	informerFactory informers.SharedInformerFactory
 	lister          v1alpha2.NodeResourceSliceLister
 	hasSynced       func() bool
 	client          clientset.Interface
 }
 
-// NewInformerManager returns a new NodeResourceSlices InformerManager. Run must be called before the manager can be used.
-func NewInformerManager(ctx context.Context, nodeName types.NodeName, client clientset.Interface) (*InformerManager, error) {
+// newInformerManager returns a new NodeResourceSlices InformerManager. Run must be called before the manager can be used.
+func newInformerManager(ctx context.Context, nodeName types.NodeName, client clientset.Interface) (*informerManager, error) {
 	logger := klog.FromContext(ctx)
 	factory := informers.NewSharedInformerFactoryWithOptions(client, 0, informers.WithTweakListOptions(func(options *metav1.ListOptions) {
 		options.FieldSelector = fields.Set{"nodeName": string(nodeName)}.String()
@@ -93,7 +93,7 @@ func NewInformerManager(ctx context.Context, nodeName types.NodeName, client cli
 		return nil, fmt.Errorf("while registering event handler on the NodeResourceSlice informer: %w", err)
 	}
 
-	return &InformerManager{
+	return &informerManager{
 		informerFactory: factory,
 		lister:          lister,
 		hasSynced:       hasSynced,
@@ -102,12 +102,12 @@ func NewInformerManager(ctx context.Context, nodeName types.NodeName, client cli
 }
 
 // Start starts syncing the NodeResourceSlices cache with the apiserver.
-func (m *InformerManager) Start(ctx context.Context, stopCh <-chan struct{}) {
-	m.informerFactory.Start(stopCh)
+func (m *informerManager) Start(ctx context.Context) {
+	m.informerFactory.Start(ctx.Done())
 	go wait.UntilWithContext(ctx, m.monitorOrphaned, monitorPeriod)
 }
 
-func (m *InformerManager) monitorOrphaned(ctx context.Context) {
+func (m *informerManager) monitorOrphaned(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	nrsList, err := m.lister.List(labels.Everything())
 	if err != nil {

@@ -24,7 +24,6 @@ import (
 	resourceapi "k8s.io/api/resource/v1alpha2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/resourceclaim"
 	"k8s.io/klog/v2"
@@ -57,11 +56,11 @@ func NewManagerImpl(kubeClient clientset.Interface, stateFileDirectory string, n
 	}
 
 	// Start monitoriing NodeResourceSlices objects
-	informerManager, err := NewInformerManager(ctx, nodeName, kubeClient)
+	informerManager, err := newInformerManager(ctx, nodeName, kubeClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NodeResourceSlices Informer manager: %+v", err)
 	}
-	informerManager.Start(ctx, wait.NeverStop)
+	informerManager.Start(ctx)
 
 	return &ManagerImpl{
 		cache:      claimInfoCache,

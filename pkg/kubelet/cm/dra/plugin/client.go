@@ -226,6 +226,17 @@ func (p *plugin) addNodeResourceSlice(ctx context.Context, slice *resourcev1alph
 
 }
 
+func (p *plugin) deleteNodeResourceSlices(ctx context.Context) {
+	logger := klog.FromContext(ctx)
+	p.Lock()
+	defer p.Unlock()
+	for _, slice := range p.nodeResourceSlices {
+		if err := p.kubeClient.ResourceV1alpha2().NodeResourceSlices().Delete(ctx, slice.Name, metav1.DeleteOptions{}); err != nil {
+			logger.Error(err, "Delete NodeResourceSlice", "name", slice.Name, "node", slice.NodeName, "driver", slice.DriverName)
+		}
+	}
+}
+
 func (p *plugin) processNodeResourcesStream(ctx context.Context, kubeClient kubernetes.Interface, nodeName, pluginName string) {
 	logger := klog.FromContext(ctx)
 	logger.Info("processNodeResourcesStream", "plugin", pluginName, "node", nodeName)

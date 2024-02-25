@@ -49,6 +49,7 @@ type plugin struct {
 	endpoint                string
 	version                 string
 	highestSupportedVersion *utilversion.Version
+	kubeClient              kubernetes.Interface
 	nodeResourceSlices      []*resourcev1alpha2.NodeResourceSlice
 }
 
@@ -100,11 +101,12 @@ func (p *plugin) setVersion(version string) {
 type RegistrationHandler struct {
 	kubeClient kubernetes.Interface
 	nodeName   string
+	ctx        context.Context
 }
 
 // NewPluginHandler returns new registration handler.
 func NewRegistrationHandler(kubeClient kubernetes.Interface, nodeName string) *RegistrationHandler {
-	return &RegistrationHandler{kubeClient: kubeClient, nodeName: nodeName}
+	return &RegistrationHandler{kubeClient: kubeClient, nodeName: nodeName, ctx: context.Background()}
 }
 
 // RegisterPlugin is called when a plugin can be registered.
@@ -121,6 +123,7 @@ func (h *RegistrationHandler) RegisterPlugin(pluginName string, endpoint string,
 		endpoint:                endpoint,
 		version:                 v1alpha3Version,
 		highestSupportedVersion: highestSupportedVersion,
+		kubeClient:              h.kubeClient,
 	}
 
 	// Storing endpoint of newly registered DRA Plugin into the map, where plugin name will be the key
@@ -186,15 +189,19 @@ func (h *RegistrationHandler) validateVersions(
 	)
 }
 
-func deregisterPlugin(pluginName string) {
-	draPlugins.delete(pluginName)
-}
-
 // DeRegisterPlugin is called when a plugin has removed its socket,
 // signaling it is no longer available.
 func (h *RegistrationHandler) DeRegisterPlugin(pluginName string) {
-	klog.InfoS("DeRegister DRA plugin", "name", pluginName)
-	deregisterPlugin(pluginName)
+	logger := klog.FromContext(h.ctx)
+	plugin := draPlugins.get(pluginName)
+	if plugin == nil {
+		logger.Info("DRA plugin is not registered", "name", pluginName)
+	} else {
+		logger.Info("Remove NodeResourceSlices for plugin", "name", pluginName)
+		plugin.deleteNodeResourceSlices(h.ctx)
+		klog.InfoS("DeRegister DRA plugin", "name", pluginName)
+		draPlugins.delete(pluginName)
+	}
 }
 
 // ValidatePlugin is called by kubelet's plugin watcher upon detection

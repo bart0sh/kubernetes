@@ -75,6 +75,12 @@ func newInformerManager(ctx context.Context, nodeName types.NodeName, client cli
 				return
 			}
 			logger.V(2).Info("NodeResourceSlice add", "obj", slice)
+			if !plugin.IsRegistered(slice.DriverName) {
+				logger.Info("Delete incorrectly added NodeResourceSlice", "name", slice.Name, "node", slice.NodeName, "driver", slice.DriverName)
+				if err := client.ResourceV1alpha2().NodeResourceSlices().Delete(ctx, slice.Name, metav1.DeleteOptions{}); err != nil {
+					logger.Error(err, "Deleting incorrectly added NodeResourceSlice", "name", slice.Name, "node", slice.NodeName, "driver", slice.DriverName)
+				}
+			}
 		},
 		UpdateFunc: func(old, new any) {
 			sliceOld, ok := old.(*resourcev1alpha2.NodeResourceSlice)

@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	resourcev1alpha2 "k8s.io/api/resource/v1alpha2"
 	utilversion "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -48,6 +49,7 @@ type plugin struct {
 	endpoint                string
 	version                 string
 	highestSupportedVersion *utilversion.Version
+	nodeResourceSlices      []*resourcev1alpha2.NodeResourceSlice
 }
 
 func (p *plugin) getOrCreateGRPCConn() (*grpc.ClientConn, error) {

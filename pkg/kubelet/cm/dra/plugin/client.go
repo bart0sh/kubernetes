@@ -219,6 +219,13 @@ func (p *plugin) NodeResources(
 	return nodeClient.NodeResources(ctx, req, opts...)
 }
 
+func (p *plugin) addNodeResourceSlice(ctx context.Context, slice *resourcev1alpha2.NodeResourceSlice) {
+	p.Lock()
+	defer p.Unlock()
+	p.nodeResourceSlices = append(p.nodeResourceSlices, slice)
+
+}
+
 func (p *plugin) processNodeResourcesStream(ctx context.Context, kubeClient kubernetes.Interface, nodeName, pluginName string) {
 	logger := klog.FromContext(ctx)
 	logger.Info("processNodeResourcesStream", "plugin", pluginName, "node", nodeName)
@@ -244,8 +251,9 @@ func (p *plugin) processNodeResourcesStream(ctx context.Context, kubeClient kube
 				DriverName:        pluginName,
 				NodeResourceModel: *response.Resources[0],
 			}
-			_, err = kubeClient.ResourceV1alpha2().NodeResourceSlices().Create(ctx, slice, metav1.CreateOptions{})
+			slice, err = kubeClient.ResourceV1alpha2().NodeResourceSlices().Create(ctx, slice, metav1.CreateOptions{})
 			logger.Info("Create NodeResourceSlice", "slice", klog.KObj(slice), "node", nodeName, "plugin", pluginName, "error", err)
+			p.addNodeResourceSlice(ctx, slice)
 		}
 	}
 }

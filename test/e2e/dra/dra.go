@@ -245,6 +245,41 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 				return fmt.Errorf("ResourceSlice object still exists: %+v", nrc)
 			}).WithTimeout(time.Second * 30).Should(gomega.Succeed())
 		})
+
+		ginkgo.It("must re-create incorrectly removed NodeResourceSlice object", func(ctx context.Context) {
+			ginkgo.By("check if NodeResourceSlice object exists on the API server")
+			resourceClient := f.ClientSet.ResourceV1alpha2().NodeResourceSlices()
+			var sliceName string
+			gomega.Eventually(ctx, func(ctx context.Context) error {
+				slices, err := resourceClient.List(ctx, metav1.ListOptions{})
+				if err != nil {
+					return err
+				}
+				for _, slice := range slices.Items {
+					if slice.DriverName == driver.Name && slice.NodeName == nodes.NodeNames[0] {
+						sliceName = slice.Name
+						return nil
+					}
+				}
+				return errors.New("slice not found")
+			}).WithTimeout(time.Second * 20).Should(gomega.Succeed())
+			ginkgo.By("remove NodeResourceSlice created by the plugin")
+			err := resourceClient.Delete(ctx, sliceName, metav1.DeleteOptions{})
+			framework.ExpectNoError(err, "delete NodeResourceSlice")
+			ginkgo.By("wait until NodeResourceSlice re-created")
+			gomega.Eventually(ctx, func(ctx context.Context) error {
+				slices, err := resourceClient.List(ctx, metav1.ListOptions{})
+				if err != nil {
+					return err
+				}
+				for _, slice := range slices.Items {
+					if slice.DriverName == driver.Name && slice.NodeName == nodes.NodeNames[0] {
+						return nil
+					}
+				}
+				return errors.New("slice not found")
+			}).WithTimeout(time.Second * 30).Should(gomega.Succeed())
+		})
 	})
 
 	driverTest := func(parameterMode parameterMode) {

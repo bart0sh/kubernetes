@@ -61,6 +61,13 @@ func newInformerManager(ctx context.Context, nodeName types.NodeName, client cli
 		return informer.HasSynced()
 	}
 
+	manager := &informerManager{
+		informerFactory: factory,
+		lister:          lister,
+		hasSynced:       hasSynced,
+		client:          client,
+	}
+
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			slice, ok := obj.(*resourcev1alpha2.NodeResourceSlice)
@@ -86,6 +93,14 @@ func newInformerManager(ctx context.Context, nodeName types.NodeName, client cli
 				return
 			}
 			logger.V(2).Info("NodeResourceSlice delete", "obj", slice)
+			if plugin.IsRegistered(slice.DriverName) {
+				logger.V(2).Info("Re-create incorrectly removed NodeResourceSlice", "name", slice.Name, "node", slice.NodeName, "driver", slice.DriverName)
+				slice.ResourceVersion = ""
+				slice, err := client.ResourceV1alpha2().NodeResourceSlices().Create(ctx, slice, metav1.CreateOptions{})
+				if err != nil {
+					logger.Error(err, "Re-creating incorrectly removed NodeResourceSlice", "name", slice.Name, "node", slice.NodeName, "driver", slice.DriverName)
+				}
+			}
 		},
 	})
 
@@ -93,12 +108,7 @@ func newInformerManager(ctx context.Context, nodeName types.NodeName, client cli
 		return nil, fmt.Errorf("while registering event handler on the NodeResourceSlice informer: %w", err)
 	}
 
-	return &informerManager{
-		informerFactory: factory,
-		lister:          lister,
-		hasSynced:       hasSynced,
-		client:          client,
-	}, err
+	return manager, nil
 }
 
 // Start starts syncing the NodeResourceSlices cache with the apiserver.

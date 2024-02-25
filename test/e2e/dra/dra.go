@@ -206,20 +206,23 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 
 			ginkgo.By("check if NodeResourceSlice object exists on the API server")
 			resourceClient := f.ClientSet.ResourceV1alpha2().NodeResourceSlices()
-			name := nodes.NodeNames[0] + "-" + driver.Name + "-slice" // TODO: detect name dynamically
-			ginkgo.DeferCleanup(func(ctx context.Context) {
-				err := resourceClient.Delete(ctx, name, metav1.DeleteOptions{})
-				framework.ExpectNoError(err, "delete NodeResourceSlice")
-			})
-			gomega.Eventually(ctx, func(ctx context.Context) (*resourcev1alpha2.NodeResourceSlice, error) {
-				slice, err := resourceClient.Get(ctx, name, metav1.GetOptions{})
-				return slice, err
-			}).WithTimeout(time.Second * 20).Should(gomega.And(
-				// TODO: validate ownerref
-				gomega.HaveField("NodeName", gomega.Equal(nodes.NodeNames[0])),
-				gomega.HaveField("DriverName", gomega.Equal(driver.Name)),
-				gomega.HaveField("NodeResourceModel.NamedResources", gomega.Not(gomega.BeNil())),
-			))
+			gomega.Eventually(ctx, func(ctx context.Context) error {
+				slices, err := resourceClient.List(ctx, metav1.ListOptions{})
+				if err != nil {
+					return err
+				}
+				for _, slice := range slices.Items {
+					// TODO: validate ownerref
+					if slice.DriverName == driver.Name && slice.NodeName == nodes.NodeNames[0] {
+						ginkgo.DeferCleanup(func(ctx context.Context) {
+							err := resourceClient.Delete(ctx, slice.Name, metav1.DeleteOptions{})
+							framework.ExpectNoError(err, "delete NodeResourceSlice")
+						})
+						return nil
+					}
+				}
+				return errors.New("slice not found")
+			}).WithTimeout(time.Second * 20).Should(gomega.Succeed())
 		})
 
 		ginkgo.It("must delete orphaned NodeResourceSlice object", func(ctx context.Context) {

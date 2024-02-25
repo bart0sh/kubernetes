@@ -238,8 +238,7 @@ func (p *plugin) processNodeResourcesStream(ctx context.Context, kubeClient kube
 		if len(response.Resources) == 1 {
 			slice := &resourcev1alpha2.NodeResourceSlice{
 				ObjectMeta: metav1.ObjectMeta{
-					// TODO: use generated names, this concatenated name might be too long.
-					Name: nodeName + "-" + pluginName + "-slice",
+					GenerateName: nodeName + "-",
 				},
 				NodeName:          nodeName,
 				DriverName:        pluginName,

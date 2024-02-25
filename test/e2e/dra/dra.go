@@ -238,11 +238,11 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 
 			ginkgo.By("wait until orphaned NodeResourceSlice is removed")
 			gomega.Eventually(ctx, func(ctx context.Context) error {
-				nrc, err := resourceClient.Get(ctx, slice.Name, metav1.GetOptions{})
+				slice, err := resourceClient.Get(ctx, slice.Name, metav1.GetOptions{})
 				if apierrors.IsNotFound(err) {
 					return nil
 				}
-				return fmt.Errorf("ResourceSlice object still exists: %+v", nrc)
+				return fmt.Errorf("ResourceSlice object still exists: %+v", slice)
 			}).WithTimeout(time.Second * 30).Should(gomega.Succeed())
 		})
 

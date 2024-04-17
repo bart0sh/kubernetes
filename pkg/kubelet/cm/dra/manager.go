@@ -108,27 +108,22 @@ func (m *ManagerImpl) PrepareResources(pod *v1.Pod) error {
 			continue
 		}
 
+		m.cache.Lock()
 		claimInfo := m.cache.get(*claimName, pod.Namespace)
 		if claimInfo == nil {
 			// claim does not exist in cache, create new claimInfo object
 			// to be processed later.
 			claimInfo = newClaimInfoFromResourceClaim(resourceClaim)
+			claimInfo.addPodReference(pod.UID)
+		} else {
+			claimInfo.addPodReference(pod.UID)
+			if claimInfo.prepared {
+				m.cache.Unlock()
+				continue
+			}
+			claimInfo = claimInfo.DeepCopy()
 		}
-
-		// We delay checkpointing of this change until this call
-		// returns successfully. It is OK to do this because we
-		// will only return successfully from this call if the
-		// checkpoint has succeeded. That means if the kubelet is
-		// ever restarted before this checkpoint succeeds, the pod
-		// whose resources are being prepared would never have
-		// started, so it's OK (actually correct) to not include it
-		// in the cache.
-		claimInfo.addPodReference(pod.UID)
-
-		if claimInfo.prepared {
-			// Already prepared this claim, no need to prepare it again
-			continue
-		}
+		m.cache.Unlock()
 
 		// Loop through all plugins and prepare for calling NodePrepareResources.
 		for _, resourceHandle := range claimInfo.ResourceHandles {
@@ -186,16 +181,9 @@ func (m *ManagerImpl) PrepareResources(pod *v1.Pod) error {
 			// mark claim as (successfully) prepared by manager, so next time we dont prepare it.
 			claimInfo.prepared = true
 
-			// TODO: We (re)add the claimInfo object to the cache and
-			// sync it to the checkpoint *after* the
-			// NodePrepareResources call has completed. This will cause
-			// issues if the kubelet gets restarted between
-			// NodePrepareResources and syncToCheckpoint. It will result
-			// in not calling NodeUnprepareResources for this claim
-			// because no claimInfo will be synced back to the cache
-			// for it after the restart. We need to resolve this issue
-			// before moving to beta.
-			m.cache.add(claimInfo)
+			m.cache.Lock()
+			m.cache.addOrUpdate(claimInfo)
+			m.cache.Unlock()
 		}
 
 		// Checkpoint to reduce redundant calls to
@@ -272,6 +260,8 @@ func (m *ManagerImpl) GetResources(pod *v1.Pod, container *v1.Container) (*Conta
 		if claimName == nil {
 			continue
 		}
+		m.cache.Lock()
+		defer m.cache.Unlock()
 		for _, claim := range container.Resources.Claims {
 			if podResourceClaim.Name != claim.Name {
 				continue
@@ -282,16 +272,13 @@ func (m *ManagerImpl) GetResources(pod *v1.Pod, container *v1.Container) (*Conta
 				return nil, fmt.Errorf("unable to get resource for namespace: %s, claim: %s", pod.Namespace, *claimName)
 			}
 
-			claimInfo.RLock()
 			claimAnnotations := claimInfo.annotationsAsList()
 			klog.V(3).InfoS("Add resource annotations", "claim", *claimName, "annotations", claimAnnotations)
 			annotations = append(annotations, claimAnnotations...)
-			for _, devices := range claimInfo.CDIDevices {
-				for _, device := range devices {
-					cdiDevices = append(cdiDevices, kubecontainer.CDIDevice{Name: device})
-				}
-			}
-			claimInfo.RUnlock()
+
+			claimCDIDevices := claimInfo.cdiDevicesAsList()
+			klog.V(3).InfoS("Add CDI devices", "claim", *claimName, "devices", claimCDIDevices)
+			cdiDevices = append(cdiDevices, claimCDIDevices...)
 		}
 	}
 
@@ -318,10 +305,12 @@ func (m *ManagerImpl) UnprepareResources(pod *v1.Pod) error {
 			continue
 		}
 
+		m.cache.Lock()
 		claimInfo := m.cache.get(*claimName, pod.Namespace)
 
 		// Skip calling NodeUnprepareResource if claim info is not cached
 		if claimInfo == nil {
+			m.cache.Unlock()
 			continue
 		}
 
@@ -333,8 +322,11 @@ func (m *ManagerImpl) UnprepareResources(pod *v1.Pod) error {
 			// before this checkpoint succeeds, we will simply call into this (idempotent)
 			// function again.
 			claimInfo.deletePodReference(pod.UID)
+			m.cache.Unlock()
 			continue
 		}
+		claimInfo = claimInfo.DeepCopy()
+		m.cache.Unlock()
 
 		// Loop through all plugins and prepare for calling NodeUnprepareResources.
 		for _, resourceHandle := range claimInfo.ResourceHandles {
@@ -388,8 +380,9 @@ func (m *ManagerImpl) UnprepareResources(pod *v1.Pod) error {
 			// for the pod. This logic is implemented in
 			// m.PodMightNeedToUnprepareResources and claimInfo.hasPodReference.
 			claimInfo := claimInfos[types.UID(claimUID)]
-			claimInfo.deletePodReference(pod.UID)
+			m.cache.Lock()
 			m.cache.delete(claimInfo.ClaimName, pod.Namespace)
+			m.cache.Unlock()
 		}
 
 		// Checkpoint to reduce redundant calls to NodeUnprepareResources after a kubelet restart.
@@ -428,6 +421,8 @@ func (m *ManagerImpl) GetContainerClaimInfos(pod *v1.Pod, container *v1.Containe
 			return nil, fmt.Errorf("determine resource claim information: %v", err)
 		}
 
+		m.cache.RLock()
+		defer m.cache.RUnlock()
 		for _, claim := range container.Resources.Claims {
 			if podResourceClaim.Name != claim.Name {
 				continue
@@ -436,7 +431,7 @@ func (m *ManagerImpl) GetContainerClaimInfos(pod *v1.Pod, container *v1.Containe
 			if claimInfo == nil {
 				return nil, fmt.Errorf("unable to get resource for namespace: %s, claim: %s", pod.Namespace, *claimName)
 			}
-			claimInfos = append(claimInfos, claimInfo)
+			claimInfos = append(claimInfos, claimInfo.DeepCopy())
 		}
 	}
 	return claimInfos, nil

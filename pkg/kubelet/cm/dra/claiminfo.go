@@ -30,8 +30,8 @@ import (
 
 // ClaimInfo holds information required
 // to prepare and unprepare a resource claim.
+// +k8s:deepcopy-gen=true
 type ClaimInfo struct {
-	sync.RWMutex
 	state.ClaimInfoState
 	// annotations is a mapping of container annotations per DRA plugin associated with
 	// a prepared resource
@@ -40,23 +40,14 @@ type ClaimInfo struct {
 }
 
 func (info *ClaimInfo) addPodReference(podUID types.UID) {
-	info.Lock()
-	defer info.Unlock()
-
 	info.PodUIDs.Insert(string(podUID))
 }
 
 func (info *ClaimInfo) deletePodReference(podUID types.UID) {
-	info.Lock()
-	defer info.Unlock()
-
 	info.PodUIDs.Delete(string(podUID))
 }
 
 func (info *ClaimInfo) addCDIDevices(pluginName string, cdiDevices []string) error {
-	info.Lock()
-	defer info.Unlock()
-
 	// NOTE: Passing CDI device names as annotations is a temporary solution
 	// It will be removed after all runtimes are updated
 	// to get CDI device names from the ContainerConfig.CDIDevices field
@@ -77,12 +68,20 @@ func (info *ClaimInfo) addCDIDevices(pluginName string, cdiDevices []string) err
 
 // annotationsAsList returns container annotations as a single list.
 func (info *ClaimInfo) annotationsAsList() []kubecontainer.Annotation {
-	info.RLock()
-	defer info.RUnlock()
-
 	var lst []kubecontainer.Annotation
 	for _, v := range info.annotations {
 		lst = append(lst, v...)
+	}
+	return lst
+}
+
+// cdiDevicesAsList returns a list of claim CDI devices
+func (info *ClaimInfo) cdiDevicesAsList() []kubecontainer.CDIDevice {
+	var lst []kubecontainer.CDIDevice
+	for _, devices := range info.CDIDevices {
+		for _, device := range devices {
+			lst = append(lst, kubecontainer.CDIDevice{Name: device})
+		}
 	}
 	return lst
 }
@@ -166,30 +165,21 @@ func newClaimInfoCache(stateDir, checkpointName string) (*claimInfoCache, error)
 				return nil, fmt.Errorf("failed to add CDIDevices to claimInfo %+v: %+v", info, err)
 			}
 		}
-		cache.add(info)
+		cache.addOrUpdate(info)
 	}
 
 	return cache, nil
 }
 
-func (cache *claimInfoCache) add(res *ClaimInfo) {
-	cache.Lock()
-	defer cache.Unlock()
-
+func (cache *claimInfoCache) addOrUpdate(res *ClaimInfo) {
 	cache.claimInfo[res.ClaimName+res.Namespace] = res
 }
 
 func (cache *claimInfoCache) get(claimName, namespace string) *ClaimInfo {
-	cache.RLock()
-	defer cache.RUnlock()
-
 	return cache.claimInfo[claimName+namespace]
 }
 
 func (cache *claimInfoCache) delete(claimName, namespace string) {
-	cache.Lock()
-	defer cache.Unlock()
-
 	delete(cache.claimInfo, claimName+namespace)
 }
 

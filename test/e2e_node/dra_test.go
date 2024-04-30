@@ -31,10 +31,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	"google.golang.org/grpc"
 
 	v1 "k8s.io/api/core/v1"
 	resourcev1alpha2 "k8s.io/api/resource/v1alpha2"
@@ -66,14 +69,9 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 	f := framework.NewDefaultFramework("dra-node")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
-	var kubeletPlugin *testdriver.ExamplePlugin
-
 	f.Context("Resource Kubelet Plugin", f.WithSerial(), func() {
-		ginkgo.BeforeEach(func(ctx context.Context) {
-			kubeletPlugin = newKubeletPlugin(ctx, getNodeName(ctx, f))
-		})
-
 		ginkgo.It("must register after Kubelet restart", func(ctx context.Context) {
+			kubeletPlugin := newKubeletPlugin(ctx, getNodeName(ctx, f), nil)
 			oldCalls := kubeletPlugin.GetGRPCCalls()
 			getNewCalls := func() []testdriver.GRPCCall {
 				calls := kubeletPlugin.GetGRPCCalls()
@@ -88,15 +86,17 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 		})
 
 		ginkgo.It("must register after plugin restart", func(ctx context.Context) {
+			kubeletPlugin := newKubeletPlugin(ctx, getNodeName(ctx, f), nil)
 			ginkgo.By("restart Kubelet Plugin")
 			kubeletPlugin.Stop()
-			kubeletPlugin = newKubeletPlugin(ctx, getNodeName(ctx, f))
+			kubeletPlugin = newKubeletPlugin(ctx, getNodeName(ctx, f), nil)
 
 			ginkgo.By("wait for Kubelet plugin re-registration")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(pluginRegistrationTimeout).Should(testdriver.BeRegistered)
 		})
 
 		ginkgo.It("must process pod created when kubelet is not running", func(ctx context.Context) {
+			_ = newKubeletPlugin(ctx, getNodeName(ctx, f), nil)
 			// Stop Kubelet
 			startKubelet := stopKubelet()
 			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drapod", 0, true)
@@ -112,29 +112,38 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 			framework.ExpectNoError(err)
 		})
 
-		ginkgo.It("must keep pod in pending state if NodePrepareResources times out", func(ctx context.Context) {
-			ginkgo.By("set delay for the NodePrepareResources call")
-			kubeletPlugin.Block()
+		f.It("must keep pod in pending state while NodePrepareResources times out", f.WithSlow(), func(ctx context.Context) {
+			interceptor := newInterceptor()
+			kubeletPlugin := newKubeletPlugin(ctx, getNodeName(ctx, f), interceptor.interceptGRPCCall)
+
+			interceptor.setBlock("NodePrepareResources", true)
 			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drapod", 0, true)
 
-			ginkgo.By("wait for pod to be in Pending state")
-			err := e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, pod.Name, "Pending", framework.PodStartShortTimeout, func(pod *v1.Pod) (bool, error) {
-				return pod.Status.Phase == v1.PodPending, nil
-			})
-			framework.ExpectNoError(err)
-
-			ginkgo.By("wait for NodePrepareResources call")
-			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodePrepareResourcesSucceeded)
+			ginkgo.By("wait for failed NodePrepareResources call")
+			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodePrepareResourcesErrored)
 
 			// TODO: Check condition or event when implemented
 			// see https://github.com/kubernetes/kubernetes/issues/118468 for details
 			ginkgo.By("check that pod is consistently in Pending state")
 			gomega.Consistently(ctx, e2epod.Get(f.ClientSet, pod)).WithTimeout(podInPendingStateTimeout).Should(e2epod.BeInPhase(v1.PodPending),
 				"Pod should be in Pending state as resource preparation time outed")
+
+			// Allow pod to run.
+			interceptor.setBlock("NodePrepareResources", false)
+
+			ginkgo.By("wait for successful NodePrepareResources call")
+			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodePrepareResourcesSucceeded)
+
+			// Pod should succeed
+			err := e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, f.ClientSet, pod.Name, f.Namespace.Name, framework.PodStartShortTimeout)
+			framework.ExpectNoError(err)
 		})
 
 		ginkgo.It("must run pod if NodePrepareResources fails and then succeeds", func(ctx context.Context) {
-			kubeletPlugin.SetFailure(errors.New("Simulated failure"))
+			interceptor := newInterceptor()
+			kubeletPlugin := newKubeletPlugin(ctx, getNodeName(ctx, f), interceptor.interceptGRPCCall)
+
+			interceptor.setFailure("NodePrepareResources", errors.New("Simulated failure"))
 			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drapod", 0, true)
 
 			ginkgo.By("wait for pod to be in Pending state")
@@ -146,7 +155,7 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 			ginkgo.By("wait for NodePrepareResources call to fail")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodePrepareResourcesErrored)
 
-			kubeletPlugin.SetFailure(nil)
+			interceptor.setFailure("NodePrepareResources", nil)
 
 			ginkgo.By("wait for NodePrepareResources call to succeed")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodePrepareResourcesSucceeded)
@@ -157,17 +166,20 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 		})
 
 		ginkgo.It("must run pod if NodeUnprepareResources fails and then succeeds", func(ctx context.Context) {
+			interceptor := newInterceptor()
+			kubeletPlugin := newKubeletPlugin(ctx, getNodeName(ctx, f), interceptor.interceptGRPCCall)
+
 			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drapod", 10, true)
 
 			ginkgo.By("wait for pod to run")
 			err := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)
 			framework.ExpectNoError(err)
 
-			kubeletPlugin.SetFailure(errors.New("Simulated failure"))
+			interceptor.setFailure("NodeUnprepareResources", errors.New("Simulated failure"))
 			ginkgo.By("wait for NodeUnprepareResources call to fail")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesErrored)
 
-			kubeletPlugin.SetFailure(nil)
+			interceptor.setFailure("NodeUnprepareResources", nil)
 
 			ginkgo.By("wait for NodeUnprepareResources call to succeed")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesSucceeded)
@@ -178,7 +190,10 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 		})
 
 		ginkgo.It("must retry NodePrepareResources after Kubelet restart", func(ctx context.Context) {
-			kubeletPlugin.SetFailure(errors.New("Simulated failure"))
+			interceptor := newInterceptor()
+			kubeletPlugin := newKubeletPlugin(ctx, getNodeName(ctx, f), interceptor.interceptGRPCCall)
+
+			interceptor.setFailure("NodePrepareResources", errors.New("Simulated failure"))
 			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drapod", 0, true)
 
 			ginkgo.By("wait for pod to be in Pending state")
@@ -193,7 +208,7 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 			ginkgo.By("stop Kubelet")
 			startKubelet := stopKubelet()
 
-			kubeletPlugin.SetFailure(nil)
+			interceptor.setFailure("NodePrepareResources", nil)
 
 			ginkgo.By("start Kubelet")
 			startKubelet()
@@ -207,20 +222,23 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 		})
 
 		ginkgo.It("must retry NodeUnprepareResources after Kubelet restart", func(ctx context.Context) {
+			interceptor := newInterceptor()
+			kubeletPlugin := newKubeletPlugin(ctx, getNodeName(ctx, f), interceptor.interceptGRPCCall)
+
 			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drapod", 10, true)
 
 			ginkgo.By("wait for pod to run")
 			err := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)
 			framework.ExpectNoError(err)
 
-			kubeletPlugin.SetFailure(errors.New("Simulated failure"))
+			interceptor.setFailure("NodeUnprepareResources", errors.New("Simulated failure"))
 			ginkgo.By("wait for NodeUnprepareResources call to fail")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesErrored)
 
 			ginkgo.By("stop Kubelet")
 			startKubelet := stopKubelet()
 
-			kubeletPlugin.SetFailure(nil)
+			interceptor.setFailure("NodeUnprepareResources", nil)
 
 			ginkgo.By("start Kubelet")
 			startKubelet()
@@ -234,13 +252,16 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 		})
 
 		ginkgo.It("must call NodeUnprepareResources for deleted pod", func(ctx context.Context) {
+			interceptor := newInterceptor()
+			kubeletPlugin := newKubeletPlugin(ctx, getNodeName(ctx, f), interceptor.interceptGRPCCall)
+
 			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drapod", 10, false)
 
 			ginkgo.By("wait for pod to run")
 			err := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)
 			framework.ExpectNoError(err)
 
-			kubeletPlugin.SetFailure(errors.New("Simulated failure"))
+			interceptor.setFailure("NodeUnprepareResources", errors.New("Simulated failure"))
 			ginkgo.By("wait for NodeUnprepareResources call to fail")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesErrored)
 
@@ -251,20 +272,23 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 			ginkgo.By("wait for NodeUnprepareResources call to fail")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesErrored)
 
-			kubeletPlugin.SetFailure(nil)
+			interceptor.setFailure("NodeUnprepareResources", nil)
 
 			ginkgo.By("wait for NodeUnprepareResources call to succeed")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesSucceeded)
 		})
 
 		ginkgo.It("must call NodeUnprepareResources for deleted pod after Kubelet restart", func(ctx context.Context) {
+			interceptor := newInterceptor()
+			kubeletPlugin := newKubeletPlugin(ctx, getNodeName(ctx, f), interceptor.interceptGRPCCall)
+
 			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drapod", 10, false)
 
 			ginkgo.By("wait for pod to run")
 			err := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)
 			framework.ExpectNoError(err)
 
-			kubeletPlugin.SetFailure(errors.New("Simulated failure"))
+			interceptor.setFailure("NodeUnprepareResources", errors.New("Simulated failure"))
 			ginkgo.By("wait for NodeUnprepareResources call to fail")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesErrored)
 
@@ -276,12 +300,9 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesErrored)
 
 			ginkgo.By("restart Kubelet")
-			stopKubelet()()
-
-			ginkgo.By("wait for NodeUnprepareResources call to fail")
-			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesErrored)
-
-			kubeletPlugin.SetFailure(nil)
+			startKubelet := stopKubelet()
+			interceptor.setFailure("NodeUnprepareResources", nil)
+			startKubelet()
 
 			ginkgo.By("wait for NodeUnprepareResources call to succeed")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(dra.PluginClientTimeout * 2).Should(testdriver.NodeUnprepareResourcesSucceeded)
@@ -290,7 +311,7 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 })
 
 // Run Kubelet plugin and wait until it's registered
-func newKubeletPlugin(ctx context.Context, nodeName string) *testdriver.ExamplePlugin {
+func newKubeletPlugin(ctx context.Context, nodeName string, interceptor grpc.UnaryServerInterceptor) *testdriver.ExamplePlugin {
 	ginkgo.By("start Kubelet plugin")
 	logger := klog.LoggerWithValues(klog.LoggerWithName(klog.Background(), "kubelet plugin"), "node", nodeName)
 	ctx = klog.NewContext(ctx, logger)
@@ -308,7 +329,9 @@ func newKubeletPlugin(ctx context.Context, nodeName string) *testdriver.ExampleP
 		cdiDir,
 		driverName,
 		"",
-		testdriver.FileOperations{},
+		testdriver.PluginConfig{
+			InterceptGRPCCall: interceptor,
+		},
 		kubeletplugin.PluginSocketPath(endpoint),
 		kubeletplugin.RegistrarSocketPath(path.Join(pluginRegistrationPath, driverName+"-reg.sock")),
 		kubeletplugin.KubeletPluginSocketPath(draAddress),
@@ -320,6 +343,97 @@ func newKubeletPlugin(ctx context.Context, nodeName string) *testdriver.ExampleP
 	ginkgo.DeferCleanup(plugin.Stop)
 
 	return plugin
+}
+
+// newInterceptor returns a gRPC interceptor which blocks and/or returns a
+// failure if requested. It distinguishes between methods based on their basic
+// name without interface (e.g. NodePrepareResources).
+func newInterceptor() *interceptor {
+	i := &interceptor{
+		block:      make(map[string]bool),
+		failure:    make(map[string]error),
+		isBlocking: make(map[string]bool),
+	}
+	i.cond = sync.NewCond(&i.mutex)
+	return i
+}
+
+type interceptor struct {
+	mutex sync.Mutex
+	cond  *sync.Cond
+
+	block      map[string]bool
+	failure    map[string]error
+	isBlocking map[string]bool
+}
+
+func (i *interceptor) interceptGRPCCall(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	parts := strings.Split(info.FullMethod, "/")
+	method := parts[len(parts)-1]
+	logger := klog.FromContext(ctx)
+	if i.block[method] {
+		// Wait for timeout or block to get lifted.
+		logger.Info("Interceptor blocking gRPC call", "info", info)
+		i.isBlocking[method] = true
+		i.cond.Broadcast()
+		for {
+			i.condWait(ctx)
+			if err := context.Cause(ctx); err != nil {
+				return nil, err
+			}
+			if !i.block[method] {
+				i.isBlocking[method] = false
+				i.cond.Broadcast()
+				if err := i.failure[method]; err != nil {
+					logger.Info("Interceptor failing gRPC call", "info", info, "err", err)
+					return nil, err
+				}
+				logger.Info("Interceptor executing gRPC call", "info", info)
+				return handler(ctx, req)
+			}
+		}
+	}
+
+	if err := i.failure[method]; err != nil {
+		logger.Info("Interceptor failing gRPC call", "info", info, "err", err)
+		return nil, err
+	}
+
+	// No logging for normal calls.
+	return handler(ctx, req)
+}
+
+// condWait returns when the context gets canceled or
+// the condition variable gets signaled.
+func (i *interceptor) condWait(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		<-ctx.Done()
+		i.mutex.Lock()
+		defer i.mutex.Unlock()
+		i.cond.Broadcast()
+	}()
+	i.cond.Wait()
+}
+
+func (i *interceptor) setBlock(method string, block bool) {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	i.block[method] = block
+	i.cond.Broadcast()
+}
+
+func (i *interceptor) setFailure(method string, failure error) {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	i.failure[method] = failure
+	i.cond.Broadcast()
 }
 
 // createTestObjects creates objects required by the test

@@ -39,10 +39,10 @@ import (
 )
 
 type ExamplePlugin struct {
-	stopCh  <-chan struct{}
-	logger  klog.Logger
-	d       kubeletplugin.DRAPlugin
-	fileOps FileOperations
+	stopCh <-chan struct{}
+	logger klog.Logger
+	d      kubeletplugin.DRAPlugin
+	config PluginConfig
 
 	cdiDir     string
 	driverName string
@@ -53,9 +53,6 @@ type ExamplePlugin struct {
 	instancesInUse sets.Set[string]
 	prepared       map[ClaimID]any
 	gRPCCalls      []GRPCCall
-
-	block   bool
-	failure error
 }
 
 type GRPCCall struct {
@@ -87,15 +84,20 @@ func (ex *ExamplePlugin) getJSONFilePath(claimUID string) string {
 	return filepath.Join(ex.cdiDir, fmt.Sprintf("%s-%s.json", ex.driverName, claimUID))
 }
 
-// FileOperations defines optional callbacks for handling CDI files
+// PluginConfig defines optional callbacks for handling CDI files
 // and some other configuration.
-type FileOperations struct {
+type PluginConfig struct {
 	// Create must overwrite the file.
 	Create func(name string, content []byte) error
 
 	// Remove must remove the file. It must not return an error when the
 	// file does not exist.
 	Remove func(name string) error
+
+	// InterceptGRPCCall, if set, gets invoked after recording that a GRPC
+	// call started and before invoking the actual implementation of that
+	// call. Can be used to inject errors or delays.
+	InterceptGRPCCall grpc.UnaryServerInterceptor
 
 	// NumResourceInstances determines whether the plugin reports resources
 	// instances and how many. A negative value causes it to report "not implemented"
@@ -104,15 +106,15 @@ type FileOperations struct {
 }
 
 // StartPlugin sets up the servers that are necessary for a DRA kubelet plugin.
-func StartPlugin(ctx context.Context, cdiDir, driverName string, nodeName string, fileOps FileOperations, opts ...kubeletplugin.Option) (*ExamplePlugin, error) {
+func StartPlugin(ctx context.Context, cdiDir, driverName string, nodeName string, config PluginConfig, opts ...kubeletplugin.Option) (*ExamplePlugin, error) {
 	logger := klog.FromContext(ctx)
-	if fileOps.Create == nil {
-		fileOps.Create = func(name string, content []byte) error {
+	if config.Create == nil {
+		config.Create = func(name string, content []byte) error {
 			return os.WriteFile(name, content, os.FileMode(0644))
 		}
 	}
-	if fileOps.Remove == nil {
-		fileOps.Remove = func(name string) error {
+	if config.Remove == nil {
+		config.Remove = func(name string) error {
 			if err := os.Remove(name); err != nil && !os.IsNotExist(err) {
 				return err
 			}
@@ -122,7 +124,7 @@ func StartPlugin(ctx context.Context, cdiDir, driverName string, nodeName string
 	ex := &ExamplePlugin{
 		stopCh:         ctx.Done(),
 		logger:         logger,
-		fileOps:        fileOps,
+		config:         config,
 		cdiDir:         cdiDir,
 		driverName:     driverName,
 		nodeName:       nodeName,
@@ -131,14 +133,23 @@ func StartPlugin(ctx context.Context, cdiDir, driverName string, nodeName string
 		prepared:       make(map[ClaimID]any),
 	}
 
-	for i := 0; i < ex.fileOps.NumResourceInstances; i++ {
+	for i := 0; i < ex.config.NumResourceInstances; i++ {
 		ex.instances.Insert(fmt.Sprintf("instance-%02d", i))
 	}
 
+	interceptor := ex.recordGRPCCall
+	if config.InterceptGRPCCall != nil {
+		// Chain the interceptors: recordGRPCCall -> InterceptGRPCCall -> original implementation.
+		interceptor = func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+			return ex.recordGRPCCall(ctx, req, info, func(ctx context.Context, req any) (any, error) {
+				return config.InterceptGRPCCall(ctx, req, info, handler)
+			})
+		}
+	}
 	opts = append(opts,
 		kubeletplugin.Logger(logger),
 		kubeletplugin.DriverName(driverName),
-		kubeletplugin.GRPCInterceptor(ex.recordGRPCCall),
+		kubeletplugin.GRPCInterceptor(interceptor),
 		kubeletplugin.GRPCStreamInterceptor(ex.recordGRPCStream),
 	)
 	d, err := kubeletplugin.Start(ex, opts...)
@@ -163,29 +174,12 @@ func (ex *ExamplePlugin) IsRegistered() bool {
 	return status.PluginRegistered
 }
 
-// Block sets a flag to block Node[Un]PrepareResources
-// to emulate time consuming or stuck calls
-func (ex *ExamplePlugin) Block() {
-	ex.block = true
-}
-
-func (ex *ExamplePlugin) SetFailure(err error) {
-	ex.failure = err
-}
-
 // NodePrepareResource ensures that the CDI file for the claim exists. It uses
 // a deterministic name to simplify NodeUnprepareResource (no need to remember
 // or discover the name) and idempotency (when called again, the file simply
 // gets written again).
 func (ex *ExamplePlugin) nodePrepareResource(ctx context.Context, claimName string, claimUID string, resourceHandle string, structuredResourceHandle []*resourceapi.StructuredResourceHandle) ([]string, error) {
 	logger := klog.FromContext(ctx)
-
-	// Block to emulate plugin stuckness or slowness.
-	// By default the call will not be blocked as ex.block = false.
-	if ex.block {
-		<-ctx.Done()
-		return nil, ctx.Err()
-	}
 
 	ex.mutex.Lock()
 	defer ex.mutex.Unlock()
@@ -280,7 +274,7 @@ func (ex *ExamplePlugin) nodePrepareResource(ctx context.Context, claimName stri
 	if err != nil {
 		return nil, fmt.Errorf("marshal spec: %w", err)
 	}
-	if err := ex.fileOps.Create(filePath, buffer); err != nil {
+	if err := ex.config.Create(filePath, buffer); err != nil {
 		return nil, fmt.Errorf("failed to write CDI file %v", err)
 	}
 
@@ -314,9 +308,6 @@ func (ex *ExamplePlugin) NodePrepareResources(ctx context.Context, req *drapbv1a
 	resp := &drapbv1alpha3.NodePrepareResourcesResponse{
 		Claims: make(map[string]*drapbv1alpha3.NodePrepareResourceResponse),
 	}
-	if ex.failure != nil {
-		return resp, ex.failure
-	}
 	for _, claimReq := range req.Claims {
 		cdiDevices, err := ex.nodePrepareResource(ctx, claimReq.Name, claimReq.Uid, claimReq.ResourceHandle, claimReq.StructuredResourceHandle)
 		if err != nil {
@@ -338,15 +329,8 @@ func (ex *ExamplePlugin) NodePrepareResources(ctx context.Context, req *drapbv1a
 func (ex *ExamplePlugin) nodeUnprepareResource(ctx context.Context, claimName string, claimUID string, resourceHandle string, structuredResourceHandle []*resourceapi.StructuredResourceHandle) error {
 	logger := klog.FromContext(ctx)
 
-	// Block to emulate plugin stuckness or slowness.
-	// By default the call will not be blocked as ex.block = false.
-	if ex.block {
-		<-ctx.Done()
-		return ctx.Err()
-	}
-
 	filePath := ex.getJSONFilePath(claimUID)
-	if err := ex.fileOps.Remove(filePath); err != nil {
+	if err := ex.config.Remove(filePath); err != nil {
 		return fmt.Errorf("error removing CDI file: %w", err)
 	}
 	logger.V(3).Info("CDI file removed", "path", filePath)
@@ -381,16 +365,12 @@ func (ex *ExamplePlugin) nodeUnprepareResource(ctx context.Context, claimName st
 		}
 	}
 	delete(ex.prepared, ClaimID{Name: claimName, UID: claimUID})
-
 	return nil
 }
 
 func (ex *ExamplePlugin) NodeUnprepareResources(ctx context.Context, req *drapbv1alpha3.NodeUnprepareResourcesRequest) (*drapbv1alpha3.NodeUnprepareResourcesResponse, error) {
 	resp := &drapbv1alpha3.NodeUnprepareResourcesResponse{
 		Claims: make(map[string]*drapbv1alpha3.NodeUnprepareResourceResponse),
-	}
-	if ex.failure != nil {
-		return resp, ex.failure
 	}
 	for _, claimReq := range req.Claims {
 		err := ex.nodeUnprepareResource(ctx, claimReq.Name, claimReq.Uid, claimReq.ResourceHandle, claimReq.StructuredResourceHandle)
@@ -406,7 +386,7 @@ func (ex *ExamplePlugin) NodeUnprepareResources(ctx context.Context, req *drapbv
 }
 
 func (ex *ExamplePlugin) NodeListAndWatchResources(req *drapbv1alpha3.NodeListAndWatchResourcesRequest, stream drapbv1alpha3.Node_NodeListAndWatchResourcesServer) error {
-	if ex.fileOps.NumResourceInstances < 0 {
+	if ex.config.NumResourceInstances < 0 {
 		ex.logger.Info("Sending no NodeResourcesResponse")
 		return status.New(codes.Unimplemented, "node resource support disabled").Err()
 	}

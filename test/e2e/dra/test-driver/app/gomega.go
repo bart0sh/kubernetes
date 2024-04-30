@@ -36,7 +36,7 @@ var BeRegistered = gcustom.MakeMatcher(func(actualCalls []GRPCCall) (bool, error
 // NodePrepareResoucesSucceeded checks that NodePrepareResources API has been called and succeeded
 var NodePrepareResourcesSucceeded = gcustom.MakeMatcher(func(actualCalls []GRPCCall) (bool, error) {
 	for _, call := range actualCalls {
-		if strings.HasSuffix(call.FullMethod, "/NodePrepareResources") && call.Err == nil {
+		if strings.HasSuffix(call.FullMethod, "/NodePrepareResources") && call.Response != nil && call.Err == nil {
 			return true, nil
 		}
 	}
@@ -56,7 +56,7 @@ var NodePrepareResourcesErrored = gcustom.MakeMatcher(func(actualCalls []GRPCCal
 // NodeUnprepareResoucesSucceeded checks that NodeUnprepareResources API has been called and succeeded
 var NodeUnprepareResourcesSucceeded = gcustom.MakeMatcher(func(actualCalls []GRPCCall) (bool, error) {
 	for _, call := range actualCalls {
-		if strings.HasSuffix(call.FullMethod, "/NodeUnprepareResources") && call.Err == nil {
+		if strings.HasSuffix(call.FullMethod, "/NodeUnprepareResources") && call.Response != nil && call.Err == nil {
 			return true, nil
 		}
 	}

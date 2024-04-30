@@ -287,7 +287,7 @@ func NewCommand() *cobra.Command {
 			return fmt.Errorf("create socket directory: %w", err)
 		}
 
-		plugin, err := StartPlugin(cmd.Context(), *cdiDir, *driverName, "", FileOperations{},
+		plugin, err := StartPlugin(cmd.Context(), *cdiDir, *driverName, "", PluginConfig{},
 			kubeletplugin.PluginSocketPath(*endpoint),
 			kubeletplugin.RegistrarSocketPath(path.Join(*pluginRegistrationPath, *driverName+"-reg.sock")),
 			kubeletplugin.KubeletPluginSocketPath(*draAddress),

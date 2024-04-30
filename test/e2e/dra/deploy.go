@@ -315,7 +315,7 @@ func (d *Driver) SetUp(nodes *Nodes, resources app.Resources) {
 		logger := klog.LoggerWithValues(klog.LoggerWithName(klog.Background(), "kubelet plugin"), "node", pod.Spec.NodeName, "pod", klog.KObj(&pod))
 		loggerCtx := klog.NewContext(ctx, logger)
 		plugin, err := app.StartPlugin(loggerCtx, "/cdi", d.Name, nodename,
-			app.FileOperations{
+			app.PluginConfig{
 				Create: func(name string, content []byte) error {
 					klog.Background().Info("creating CDI file", "node", nodename, "filename", name, "content", string(content))
 					return d.createFile(&pod, name, content)

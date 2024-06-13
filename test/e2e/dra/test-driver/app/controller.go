@@ -70,9 +70,7 @@ func (r Resources) AllNodes(nodeLister listersv1.NodeLister) []string {
 }
 
 func (r Resources) NewAllocation(node string, data []byte) *resourcev1alpha2.AllocationResult {
-	allocation := &resourcev1alpha2.AllocationResult{
-		Shareable: r.Shareable,
-	}
+	allocation := &resourcev1alpha2.AllocationResult{}
 	allocation.ResourceHandles = []resourcev1alpha2.ResourceHandle{
 		{
 			DriverName: r.DriverName,

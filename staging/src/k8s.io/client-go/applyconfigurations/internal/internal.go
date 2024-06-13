@@ -12044,9 +12044,6 @@ var schemaYAML = typed.YAMLObject(`types:
           elementType:
             namedType: io.k8s.api.resource.v1alpha2.ResourceHandle
           elementRelationship: atomic
-    - name: shareable
-      type:
-        scalar: boolean
 - name: io.k8s.api.resource.v1alpha2.DriverAllocationResult
   map:
     fields:
@@ -12265,9 +12262,6 @@ var schemaYAML = typed.YAMLObject(`types:
       type:
         namedType: io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
       default: {}
-    - name: shareable
-      type:
-        scalar: boolean
 - name: io.k8s.api.resource.v1alpha2.ResourceClaimParametersReference
   map:
     fields:

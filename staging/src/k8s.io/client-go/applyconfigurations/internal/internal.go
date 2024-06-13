@@ -12297,9 +12297,6 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: io.k8s.api.resource.v1alpha2.ResourceClaimSpec
   map:
     fields:
-    - name: allocationMode
-      type:
-        scalar: string
     - name: parametersRef
       type:
         namedType: io.k8s.api.resource.v1alpha2.ResourceClaimParametersReference

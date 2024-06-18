@@ -31,6 +31,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	"k8s.io/kubernetes/pkg/apis/resource"
 	"k8s.io/kubernetes/pkg/apis/resource/validation"
+	"k8s.io/utils/ptr"
 )
 
 // resourceSliceStrategy implements behavior for ResourceSlice objects
@@ -86,7 +87,7 @@ var TriggerFunc = map[string]storage.IndexerFunc{
 }
 
 func nodeNameTriggerFunc(obj runtime.Object) string {
-	return obj.(*resource.ResourceSlice).NodeName
+	return ptr.Deref(obj.(*resource.ResourceSlice).Spec.NodeName, "")
 }
 
 // Indexers returns the indexers for ResourceSlice.
@@ -101,7 +102,7 @@ func nodeNameIndexFunc(obj interface{}) ([]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("not a ResourceSlice")
 	}
-	return []string{slice.NodeName}, nil
+	return []string{ptr.Deref(slice.Spec.NodeName, "")}, nil
 }
 
 // GetAttrs returns labels and fields of a given object for filtering purposes.
@@ -131,8 +132,8 @@ func toSelectableFields(slice *resource.ResourceSlice) fields.Set {
 	// field here or the number of object-meta related fields changes, this should
 	// be adjusted.
 	fields := make(fields.Set, 3)
-	fields["nodeName"] = slice.NodeName
-	fields["driverName"] = slice.DriverName
+	fields["nodeName"] = ptr.Deref(slice.Spec.NodeName, "")
+	fields["driverName"] = slice.Spec.DriverName
 
 	// Adds one field.
 	return generic.AddObjectMetaFieldsSet(fields, &slice.ObjectMeta, false)

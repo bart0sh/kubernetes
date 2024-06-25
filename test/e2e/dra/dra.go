@@ -305,7 +305,7 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 			}
 		})
 
-		ginkgo.It("must deallocate after use when using delayed allocation", func(ctx context.Context) {
+		ginkgo.It("must deallocate after use", func(ctx context.Context) {
 			objects, expectedEnv := b.flexibleParameters()
 			pod := b.podExternal()
 			claim := b.externalClaim()

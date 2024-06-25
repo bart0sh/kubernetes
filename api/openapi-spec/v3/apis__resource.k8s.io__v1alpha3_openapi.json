@@ -355,19 +355,6 @@
             "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
             "type": "string"
           },
-          "config": {
-            "description": "Config defines configuration parameters that apply to each device that is claimed via this class. Some classses may potentially be satisfied by multiple drivers, so each instance of a vendor configuration applies to exactly one driver.\n\nThey are passed to the driver, but are not considered while allocating the claim.",
-            "items": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/io.k8s.api.resource.v1alpha3.ClassConfiguration"
-                }
-              ],
-              "default": {}
-            },
-            "type": "array",
-            "x-kubernetes-list-type": "atomic"
-          },
           "kind": {
             "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
             "type": "string"
@@ -381,28 +368,19 @@
             "default": {},
             "description": "Standard object metadata"
           },
-          "selectors": {
-            "description": "Each selector must be satisfied by a device which is claimed via this class.",
-            "items": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/io.k8s.api.resource.v1alpha3.Selector"
-                }
-              ],
-              "default": {}
-            },
-            "type": "array",
-            "x-kubernetes-list-type": "atomic"
-          },
-          "suitableNodes": {
+          "spec": {
             "allOf": [
               {
-                "$ref": "#/components/schemas/io.k8s.api.core.v1.NodeSelector"
+                "$ref": "#/components/schemas/io.k8s.api.resource.v1alpha3.DeviceClassSpec"
               }
             ],
-            "description": "Only nodes matching the selector will be considered by the scheduler when trying to find a Node that fits a Pod when that Pod uses a claim that has not been allocated yet *and* that claim gets allocated through a control plane controller. It is ignored when the claim does not use a control plane controller for allocation.\n\nSetting this field is optional. If unset, all Nodes are candidates.\n\nThis is an alpha field and requires enabling the DRAControlPlaneController feature gate."
+            "default": {},
+            "description": "Spec defines what can be allocated and how to configure it.\n\nThis is mutable. Consumers have to be prepared for classes changing at any time, either because they get updated or replaced. Claim allocations are done once based on whatever was set in classes at the time of allocation.\n\nChanging the spec bumps up the generation number."
           }
         },
+        "required": [
+          "spec"
+        ],
         "type": "object",
         "x-kubernetes-group-version-kind": [
           {
@@ -456,6 +434,45 @@
             "version": "v1alpha3"
           }
         ]
+      },
+      "io.k8s.api.resource.v1alpha3.DeviceClassSpec": {
+        "properties": {
+          "config": {
+            "description": "Config defines configuration parameters that apply to each device that is claimed via this class. Some classses may potentially be satisfied by multiple drivers, so each instance of a vendor configuration applies to exactly one driver.\n\nThey are passed to the driver, but are not considered while allocating the claim.",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/io.k8s.api.resource.v1alpha3.ClassConfiguration"
+                }
+              ],
+              "default": {}
+            },
+            "type": "array",
+            "x-kubernetes-list-type": "atomic"
+          },
+          "selectors": {
+            "description": "Each selector must be satisfied by a device which is claimed via this class.",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/io.k8s.api.resource.v1alpha3.Selector"
+                }
+              ],
+              "default": {}
+            },
+            "type": "array",
+            "x-kubernetes-list-type": "atomic"
+          },
+          "suitableNodes": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/io.k8s.api.core.v1.NodeSelector"
+              }
+            ],
+            "description": "Only nodes matching the selector will be considered by the scheduler when trying to find a Node that fits a Pod when that Pod uses a claim that has not been allocated yet *and* that claim gets allocated through a control plane controller. It is ignored when the claim does not use a control plane controller for allocation.\n\nSetting this field is optional. If unset, all Nodes are candidates.\n\nThis is an alpha field and requires enabling the DRAControlPlaneController feature gate."
+          }
+        },
+        "type": "object"
       },
       "io.k8s.api.resource.v1alpha3.DeviceRequest": {
         "description": "DeviceRequest is currently the only permitted alternative in RequestDetail.",
@@ -738,7 +755,7 @@
               }
             ],
             "default": {},
-            "description": "Spec defines what to allocated and how to configure it."
+            "description": "Spec defines what to allocated and how to configure it. The spec is immutable."
           },
           "status": {
             "allOf": [
@@ -1089,7 +1106,7 @@
               }
             ],
             "default": {},
-            "description": "Contains the information published by the driver."
+            "description": "Contains the information published by the driver.\n\nChanging the spec bumps up the generation number."
           }
         },
         "required": [

@@ -56,23 +56,6 @@ func validateResourceClaimSpec(spec *resource.ResourceClaimSpec, fldPath *field.
 	return allErrs
 }
 
-// ValidateClass validates a DeviceClass.
-func ValidateDeviceClass(class *resource.DeviceClass) field.ErrorList {
-	allErrs := corevalidation.ValidateObjectMeta(&class.ObjectMeta, false, corevalidation.ValidateClassName, field.NewPath("metadata"))
-	if class.SuitableNodes != nil {
-		allErrs = append(allErrs, corevalidation.ValidateNodeSelector(class.SuitableNodes, field.NewPath("suitableNodes"))...)
-	}
-
-	return allErrs
-}
-
-// ValidateClassUpdate tests if an update to DeviceClass is valid.
-func ValidateDeviceClassUpdate(class, oldClass *resource.DeviceClass) field.ErrorList {
-	allErrs := corevalidation.ValidateObjectMetaUpdate(&class.ObjectMeta, &oldClass.ObjectMeta, field.NewPath("metadata"))
-	allErrs = append(allErrs, ValidateDeviceClass(class)...)
-	return allErrs
-}
-
 // ValidateResourceClaimUpdate tests if an update to ResourceClaim is valid.
 func ValidateResourceClaimUpdate(resourceClaim, oldClaim *resource.ResourceClaim) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMetaUpdate(&resourceClaim.ObjectMeta, &oldClaim.ObjectMeta, field.NewPath("metadata"))
@@ -207,6 +190,28 @@ func validateResourceClaimConsumers(consumers []resource.ResourceClaimConsumerRe
 		// just shows the number of entries.
 		allErrs = append(allErrs, field.TooLongMaxLength(fldPath, len(consumers), maxSize))
 	}
+	return allErrs
+}
+
+// ValidateClass validates a DeviceClass.
+func ValidateDeviceClass(class *resource.DeviceClass) field.ErrorList {
+	allErrs := corevalidation.ValidateObjectMeta(&class.ObjectMeta, false, corevalidation.ValidateClassName, field.NewPath("metadata"))
+	allErrs = append(allErrs, validateDeviceClassSpec(&class.Spec, field.NewPath("spec"))...)
+	return allErrs
+}
+
+func validateDeviceClassSpec(spec *resource.DeviceClassSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	if spec.SuitableNodes != nil {
+		allErrs = append(allErrs, corevalidation.ValidateNodeSelector(spec.SuitableNodes, field.NewPath("suitableNodes"))...)
+	}
+	return allErrs
+}
+
+// ValidateClassUpdate tests if an update to DeviceClass is valid.
+func ValidateDeviceClassUpdate(class, oldClass *resource.DeviceClass) field.ErrorList {
+	allErrs := corevalidation.ValidateObjectMetaUpdate(&class.ObjectMeta, &oldClass.ObjectMeta, field.NewPath("metadata"))
+	allErrs = append(allErrs, ValidateDeviceClass(class)...)
 	return allErrs
 }
 

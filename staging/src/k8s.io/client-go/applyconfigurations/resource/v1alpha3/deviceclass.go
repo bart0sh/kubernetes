@@ -23,7 +23,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	managedfields "k8s.io/apimachinery/pkg/util/managedfields"
-	corev1 "k8s.io/client-go/applyconfigurations/core/v1"
 	internal "k8s.io/client-go/applyconfigurations/internal"
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
@@ -33,9 +32,7 @@ import (
 type DeviceClassApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Selectors                        []SelectorApplyConfiguration           `json:"selectors,omitempty"`
-	Config                           []ClassConfigurationApplyConfiguration `json:"config,omitempty"`
-	SuitableNodes                    *corev1.NodeSelectorApplyConfiguration `json:"suitableNodes,omitempty"`
+	Spec                             *DeviceClassSpecApplyConfiguration `json:"spec,omitempty"`
 }
 
 // DeviceClass constructs a declarative configuration of the DeviceClass type for use with
@@ -241,37 +238,11 @@ func (b *DeviceClassApplyConfiguration) ensureObjectMetaApplyConfigurationExists
 	}
 }
 
-// WithSelectors adds the given value to the Selectors field in the declarative configuration
-// and returns the receiver, so that objects can be build by chaining "With" function invocations.
-// If called multiple times, values provided by each call will be appended to the Selectors field.
-func (b *DeviceClassApplyConfiguration) WithSelectors(values ...*SelectorApplyConfiguration) *DeviceClassApplyConfiguration {
-	for i := range values {
-		if values[i] == nil {
-			panic("nil value passed to WithSelectors")
-		}
-		b.Selectors = append(b.Selectors, *values[i])
-	}
-	return b
-}
-
-// WithConfig adds the given value to the Config field in the declarative configuration
-// and returns the receiver, so that objects can be build by chaining "With" function invocations.
-// If called multiple times, values provided by each call will be appended to the Config field.
-func (b *DeviceClassApplyConfiguration) WithConfig(values ...*ClassConfigurationApplyConfiguration) *DeviceClassApplyConfiguration {
-	for i := range values {
-		if values[i] == nil {
-			panic("nil value passed to WithConfig")
-		}
-		b.Config = append(b.Config, *values[i])
-	}
-	return b
-}
-
-// WithSuitableNodes sets the SuitableNodes field in the declarative configuration to the given value
+// WithSpec sets the Spec field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the SuitableNodes field is set to the value of the last call.
-func (b *DeviceClassApplyConfiguration) WithSuitableNodes(value *corev1.NodeSelectorApplyConfiguration) *DeviceClassApplyConfiguration {
-	b.SuitableNodes = value
+// If called multiple times, the Spec field is set to the value of the last call.
+func (b *DeviceClassApplyConfiguration) WithSpec(value *DeviceClassSpecApplyConfiguration) *DeviceClassApplyConfiguration {
+	b.Spec = value
 	return b
 }
 

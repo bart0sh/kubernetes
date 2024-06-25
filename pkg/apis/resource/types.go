@@ -54,6 +54,8 @@ type ResourceSlice struct {
 	metav1.ObjectMeta
 
 	// Contains the information published by the driver.
+	//
+	// Changing the spec bumps up the generation number.
 	Spec ResourceSliceSpec
 
 	// Future extension: status.
@@ -287,6 +289,7 @@ type ResourceClaim struct {
 	metav1.ObjectMeta
 
 	// Spec defines what to allocated and how to configure it.
+	// The spec is immutable.
 	Spec ResourceClaimSpec
 
 	// Status describes whether the claim is ready for use.
@@ -851,6 +854,18 @@ type DeviceClass struct {
 	// +optional
 	metav1.ObjectMeta
 
+	// Spec defines what can be allocated and how to configure it.
+	//
+	// This is mutable. Consumers have to be prepared for classes changing
+	// at any time, either because they get updated or replaced. Claim
+	// allocations are done once based on whatever was set in classes at
+	// the time of allocation.
+	//
+	// Changing the spec bumps up the generation number.
+	Spec DeviceClassSpec
+}
+
+type DeviceClassSpec struct {
 	// Each selector must be satisfied by a device which is claimed via this class.
 	//
 	// +optional

@@ -139,11 +139,9 @@ func (DeviceCapacity) SwaggerDoc() map[string]string {
 }
 
 var map_DeviceClass = map[string]string{
-	"":              "DeviceClass is a vendor or admin-provided resource that contains device configuration and selectors. It can be referenced in the device requests of a claim to apply these presets. Cluster scoped.",
-	"metadata":      "Standard object metadata",
-	"selectors":     "Each selector must be satisfied by a device which is claimed via this class.",
-	"config":        "Config defines configuration parameters that apply to each device that is claimed via this class. Some classses may potentially be satisfied by multiple drivers, so each instance of a vendor configuration applies to exactly one driver.\n\nThey are passed to the driver, but are not considered while allocating the claim.",
-	"suitableNodes": "Only nodes matching the selector will be considered by the scheduler when trying to find a Node that fits a Pod when that Pod uses a claim that has not been allocated yet *and* that claim gets allocated through a control plane controller. It is ignored when the claim does not use a control plane controller for allocation.\n\nSetting this field is optional. If unset, all Nodes are candidates.\n\nThis is an alpha field and requires enabling the DRAControlPlaneController feature gate.",
+	"":         "DeviceClass is a vendor or admin-provided resource that contains device configuration and selectors. It can be referenced in the device requests of a claim to apply these presets. Cluster scoped.",
+	"metadata": "Standard object metadata",
+	"spec":     "Spec defines what can be allocated and how to configure it.\n\nThis is mutable. Consumers have to be prepared for classes changing at any time, either because they get updated or replaced. Claim allocations are done once based on whatever was set in classes at the time of allocation.\n\nChanging the spec bumps up the generation number.",
 }
 
 func (DeviceClass) SwaggerDoc() map[string]string {
@@ -158,6 +156,16 @@ var map_DeviceClassList = map[string]string{
 
 func (DeviceClassList) SwaggerDoc() map[string]string {
 	return map_DeviceClassList
+}
+
+var map_DeviceClassSpec = map[string]string{
+	"selectors":     "Each selector must be satisfied by a device which is claimed via this class.",
+	"config":        "Config defines configuration parameters that apply to each device that is claimed via this class. Some classses may potentially be satisfied by multiple drivers, so each instance of a vendor configuration applies to exactly one driver.\n\nThey are passed to the driver, but are not considered while allocating the claim.",
+	"suitableNodes": "Only nodes matching the selector will be considered by the scheduler when trying to find a Node that fits a Pod when that Pod uses a claim that has not been allocated yet *and* that claim gets allocated through a control plane controller. It is ignored when the claim does not use a control plane controller for allocation.\n\nSetting this field is optional. If unset, all Nodes are candidates.\n\nThis is an alpha field and requires enabling the DRAControlPlaneController feature gate.",
+}
+
+func (DeviceClassSpec) SwaggerDoc() map[string]string {
+	return map_DeviceClassSpec
 }
 
 var map_DeviceRequest = map[string]string{
@@ -255,7 +263,7 @@ func (RequestDetail) SwaggerDoc() map[string]string {
 var map_ResourceClaim = map[string]string{
 	"":         "ResourceClaim describes which resources (typically one or more devices) are needed by a claim consumer. Its status tracks whether the claim has been allocated and what the resulting attributes are.\n\nThis is an alpha type and requires enabling the DynamicResourceAllocation feature gate.",
 	"metadata": "Standard object metadata",
-	"spec":     "Spec defines what to allocated and how to configure it.",
+	"spec":     "Spec defines what to allocated and how to configure it. The spec is immutable.",
 	"status":   "Status describes whether the claim is ready for use.",
 }
 
@@ -351,7 +359,7 @@ func (ResourceClaimTemplateSpec) SwaggerDoc() map[string]string {
 var map_ResourceSlice = map[string]string{
 	"":         "One or more slices represent a pool of devices managed by a given driver. How many slices the driver uses to publish that pool is driver-specific. Each device in a given pool must have a unique name.\n\nThe slice in which a device gets published may change over time. The unique identifier for a device is the tuple `<driver name>/<pool name>/<device name>`. Driver name and device name don't contain slashes, so it is okay to concatenate them like this in a string with a slash as separator. The pool name itself may contain additional slashes.\n\nWhenever a driver needs to update a pool, it bumps the pool generation number and updates all slices with that new number and any new device definitions. A consumer must only use device definitions from slices with the highest generation number and ignore all others.\n\nIf necessary, a consumer can check the number of total devices in a pool (included in each slice) to determine whether its view of a pool is complete.\n\nFor devices that are not local to a node, the node name is not set. Instead, the driver may use a node selector to specify where the devices are available.",
 	"metadata": "Standard object metadata",
-	"spec":     "Contains the information published by the driver.",
+	"spec":     "Contains the information published by the driver.\n\nChanging the spec bumps up the generation number.",
 }
 
 func (ResourceSlice) SwaggerDoc() map[string]string {

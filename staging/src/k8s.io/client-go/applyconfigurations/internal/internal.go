@@ -12171,12 +12171,6 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: apiVersion
       type:
         scalar: string
-    - name: config
-      type:
-        list:
-          elementType:
-            namedType: io.k8s.api.resource.v1alpha3.ClassConfiguration
-          elementRelationship: atomic
     - name: kind
       type:
         scalar: string
@@ -12184,6 +12178,19 @@ var schemaYAML = typed.YAMLObject(`types:
       type:
         namedType: io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
       default: {}
+    - name: spec
+      type:
+        namedType: io.k8s.api.resource.v1alpha3.DeviceClassSpec
+      default: {}
+- name: io.k8s.api.resource.v1alpha3.DeviceClassSpec
+  map:
+    fields:
+    - name: config
+      type:
+        list:
+          elementType:
+            namedType: io.k8s.api.resource.v1alpha3.ClassConfiguration
+          elementRelationship: atomic
     - name: selectors
       type:
         list:

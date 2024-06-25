@@ -1562,6 +1562,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &resourcev1alpha3.DeviceCapacityApplyConfiguration{}
 	case v1alpha3.SchemeGroupVersion.WithKind("DeviceClass"):
 		return &resourcev1alpha3.DeviceClassApplyConfiguration{}
+	case v1alpha3.SchemeGroupVersion.WithKind("DeviceClassSpec"):
+		return &resourcev1alpha3.DeviceClassSpecApplyConfiguration{}
 	case v1alpha3.SchemeGroupVersion.WithKind("DeviceRequest"):
 		return &resourcev1alpha3.DeviceRequestApplyConfiguration{}
 	case v1alpha3.SchemeGroupVersion.WithKind("OpaqueConfiguration"):

@@ -65,6 +65,8 @@ type ResourceSlice struct {
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
 	// Contains the information published by the driver.
+	//
+	// Changing the spec bumps up the generation number.
 	Spec ResourceSliceSpec `json:"spec" protobuf:"bytes,2,name=spec"`
 
 	// Future extension: status.
@@ -301,6 +303,7 @@ type ResourceClaim struct {
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
 	// Spec defines what to allocated and how to configure it.
+	// The spec is immutable.
 	Spec ResourceClaimSpec `json:"spec" protobuf:"bytes,2,name=spec"`
 
 	// Status describes whether the claim is ready for use.
@@ -324,7 +327,7 @@ type ResourceClaimSpec struct {
 	//
 	// +optional
 	// +listType=atomic
-	Constraints []Constraint `json:"constraints" protobuf:"bytes,2,name=constraints"`
+	Constraints []Constraint `json:"constraints,omitempty" protobuf:"bytes,2,opt,name=constraints"`
 
 	// This field holds configuration for multiple potential drivers which
 	// could satisfy requests in this claim. It is ignored while allocating
@@ -332,7 +335,7 @@ type ResourceClaimSpec struct {
 	//
 	// +optional
 	// +listType=atomic
-	Config []ClaimConfiguration `json:"config" protobuf:"bytes,3,name=config"`
+	Config []ClaimConfiguration `json:"config,omitempty" protobuf:"bytes,3,opt,name=config"`
 
 	// ControllerName defines the name of the DRA driver that is meant
 	// to handle allocation of this claim. If empty, allocation is handled
@@ -423,7 +426,7 @@ type DeviceRequest struct {
 	// Default is false.
 	//
 	// +optional
-	AdminAccess *bool `json:"adminAccess" protobuf:"bytes,4,name=adminAccess"`
+	AdminAccess *bool `json:"adminAccess,omitempty" protobuf:"bytes,4,opt,name=adminAccess"`
 }
 
 // Exactly one field must be set.
@@ -872,11 +875,25 @@ type DeviceClass struct {
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
+	// Spec defines what can be allocated and how to configure it.
+	//
+	// This is mutable. Consumers have to be prepared for classes changing
+	// at any time, either because they get updated or replaced. Claim
+	// allocations are done once based on whatever was set in classes at
+	// the time of allocation.
+	//
+	// Changing the spec bumps up the generation number.
+	Spec DeviceClassSpec `json:"spec" protobuf:"bytes,2,name=spec"`
+
+	// Future extension: status with information about errors in CEL expressions.
+}
+
+type DeviceClassSpec struct {
 	// Each selector must be satisfied by a device which is claimed via this class.
 	//
 	// +optional
 	// +listType=atomic
-	Selectors []Selector `json:"selectors,omitempty" protobuf:"bytes,2,opt,name=selectors"`
+	Selectors []Selector `json:"selectors,omitempty" protobuf:"bytes,1,opt,name=selectors"`
 
 	// Config defines configuration parameters that apply to each device that is claimed via this class.
 	// Some classses may potentially be satisfied by multiple drivers, so each instance of a vendor
@@ -886,7 +903,7 @@ type DeviceClass struct {
 	//
 	// +optional
 	// +listType=atomic
-	Config []ClassConfiguration `json:"config,omitempty" protobuf:"bytes,3,opt,name=config"`
+	Config []ClassConfiguration `json:"config,omitempty" protobuf:"bytes,2,opt,name=config"`
 
 	// Only nodes matching the selector will be considered by the scheduler
 	// when trying to find a Node that fits a Pod when that Pod uses
@@ -901,7 +918,7 @@ type DeviceClass struct {
 	// feature gate.
 	//
 	// +optional
-	SuitableNodes *v1.NodeSelector `json:"suitableNodes,omitempty" protobuf:"bytes,4,opt,name=suitableNodes"`
+	SuitableNodes *v1.NodeSelector `json:"suitableNodes,omitempty" protobuf:"bytes,3,opt,name=suitableNodes"`
 }
 
 // ClassConfiguration is used in DeviceClass.

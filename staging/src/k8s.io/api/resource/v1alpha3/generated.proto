@@ -316,11 +316,33 @@ message DeviceClass {
   // +optional
   optional .k8s.io.apimachinery.pkg.apis.meta.v1.ObjectMeta metadata = 1;
 
+  // Spec defines what can be allocated and how to configure it.
+  //
+  // This is mutable. Consumers have to be prepared for classes changing
+  // at any time, either because they get updated or replaced. Claim
+  // allocations are done once based on whatever was set in classes at
+  // the time of allocation.
+  //
+  // Changing the spec bumps up the generation number.
+  optional DeviceClassSpec spec = 2;
+}
+
+// DeviceClassList is a collection of classes.
+message DeviceClassList {
+  // Standard list metadata
+  // +optional
+  optional .k8s.io.apimachinery.pkg.apis.meta.v1.ListMeta metadata = 1;
+
+  // Items is the list of resource classes.
+  repeated DeviceClass items = 2;
+}
+
+message DeviceClassSpec {
   // Each selector must be satisfied by a device which is claimed via this class.
   //
   // +optional
   // +listType=atomic
-  repeated Selector selectors = 2;
+  repeated Selector selectors = 1;
 
   // Config defines configuration parameters that apply to each device that is claimed via this class.
   // Some classses may potentially be satisfied by multiple drivers, so each instance of a vendor
@@ -330,7 +352,7 @@ message DeviceClass {
   //
   // +optional
   // +listType=atomic
-  repeated ClassConfiguration config = 3;
+  repeated ClassConfiguration config = 2;
 
   // Only nodes matching the selector will be considered by the scheduler
   // when trying to find a Node that fits a Pod when that Pod uses
@@ -345,17 +367,7 @@ message DeviceClass {
   // feature gate.
   //
   // +optional
-  optional .k8s.io.api.core.v1.NodeSelector suitableNodes = 4;
-}
-
-// DeviceClassList is a collection of classes.
-message DeviceClassList {
-  // Standard list metadata
-  // +optional
-  optional .k8s.io.apimachinery.pkg.apis.meta.v1.ListMeta metadata = 1;
-
-  // Items is the list of resource classes.
-  repeated DeviceClass items = 2;
+  optional .k8s.io.api.core.v1.NodeSelector suitableNodes = 3;
 }
 
 // DeviceRequest is currently the only permitted alternative in RequestDetail.
@@ -556,6 +568,7 @@ message ResourceClaim {
   optional .k8s.io.apimachinery.pkg.apis.meta.v1.ObjectMeta metadata = 1;
 
   // Spec defines what to allocated and how to configure it.
+  // The spec is immutable.
   optional ResourceClaimSpec spec = 2;
 
   // Status describes whether the claim is ready for use.
@@ -766,6 +779,8 @@ message ResourceSlice {
   optional .k8s.io.apimachinery.pkg.apis.meta.v1.ObjectMeta metadata = 1;
 
   // Contains the information published by the driver.
+  //
+  // Changing the spec bumps up the generation number.
   optional ResourceSliceSpec spec = 2;
 }
 

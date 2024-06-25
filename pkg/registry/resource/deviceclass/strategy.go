@@ -19,6 +19,7 @@ package deviceclass
 import (
 	"context"
 
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apiserver/pkg/storage/names"
@@ -40,6 +41,8 @@ func (deviceClassStrategy) NamespaceScoped() bool {
 }
 
 func (deviceClassStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
+	class := obj.(*resource.DeviceClass)
+	class.Generation = 1
 }
 
 func (deviceClassStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
@@ -59,6 +62,13 @@ func (deviceClassStrategy) AllowCreateOnUpdate() bool {
 }
 
 func (deviceClassStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
+	class := obj.(*resource.DeviceClass)
+	oldClass := old.(*resource.DeviceClass)
+
+	// Any changes to the spec increment the generation number.
+	if !apiequality.Semantic.DeepEqual(oldClass.Spec, class.Spec) {
+		class.Generation = oldClass.Generation + 1
+	}
 }
 
 func (deviceClassStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,6 +48,8 @@ func (resourceSliceStrategy) NamespaceScoped() bool {
 }
 
 func (resourceSliceStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
+	slice := obj.(*resource.ResourceSlice)
+	slice.Generation = 1
 }
 
 func (resourceSliceStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
@@ -66,6 +69,13 @@ func (resourceSliceStrategy) AllowCreateOnUpdate() bool {
 }
 
 func (resourceSliceStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
+	slice := obj.(*resource.ResourceSlice)
+	oldSlice := old.(*resource.ResourceSlice)
+
+	// Any changes to the spec increment the generation number.
+	if !apiequality.Semantic.DeepEqual(oldSlice.Spec, slice.Spec) {
+		slice.Generation = oldSlice.Generation + 1
+	}
 }
 
 func (resourceSliceStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {

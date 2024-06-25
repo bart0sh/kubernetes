@@ -50,7 +50,6 @@ type Resources struct {
 	// available. Mutually exclusive with Nodes.
 	NodeLabels     labels.Set
 	MaxAllocations int
-	Shareable      bool
 
 	// AllocateWrapper, if set, gets called for each Allocate call.
 	AllocateWrapper AllocateWrapperType

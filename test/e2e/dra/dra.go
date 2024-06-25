@@ -54,9 +54,7 @@ const (
 
 // networkResources can be passed to NewDriver directly.
 func networkResources() app.Resources {
-	return app.Resources{
-		Shareable: true,
-	}
+	return app.Resources{}
 }
 
 // perNode returns a function which can be passed to NewDriver. The nodes
@@ -336,7 +334,6 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 		numPods := 10
 		generateResources := func() app.Resources {
 			resources := perNode(maxAllocations, nodes)()
-			resources.Shareable = true
 			return resources
 		}
 		driver := NewDriver(f, nodes, generateResources) // All tests get their own driver instance.

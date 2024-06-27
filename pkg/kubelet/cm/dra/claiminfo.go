@@ -56,7 +56,11 @@ func newClaimInfoFromClaim(claim *resourceapi.ResourceClaim) (*ClaimInfo, error)
 		return nil, errors.New("not allocated")
 	}
 	for _, result := range claim.Status.Allocation.Results {
-		claimInfoState.Drivers[result.DriverName] = state.DriverState{}
+		claimInfoState.Drivers[result.DriverName] = state.DriverState{
+			CDIDevices: map[string][]string{
+				result.RequestName: {result.DeviceName},
+			},
+		}
 	}
 	info := &ClaimInfo{
 		ClaimInfoState: claimInfoState,

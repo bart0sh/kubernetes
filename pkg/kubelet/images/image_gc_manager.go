@@ -432,9 +432,14 @@ func (im *realImageGCManager) DeleteUnusedImages(ctx context.Context) error {
 	freeTime := time.Now()
 	images, err := im.imagesInEvictionOrder(ctx, freeTime)
 	if err != nil {
+		klog.ErrorS(err, "Unable to get list of images for deletion")
 		return err
 	}
+	klog.InfoS("Images in eviction order", "images", images)
 	_, err = im.freeSpace(ctx, math.MaxInt64, freeTime, images)
+	if err != nil {
+		klog.ErrorS(err, "Unable to delete unused images")
+	}
 	return err
 }
 

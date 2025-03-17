@@ -265,38 +265,36 @@ func TestPluginRegistrationAtKubeletStart(t *testing.T) {
 //     a stale socket left on the file system.
 //     The PluginConnectionMonitor detects the disconnect and unregisters the plugin.
 func TestPluginDisconnect(t *testing.T) {
+	socketDir := t.TempDir()
 	for name, test := range map[string]struct {
 		unlinkSocket bool
 	}{
-		"plugin-stops-and-unlinks-socket": {
+		"unlink-socket": {
 			unlinkSocket: true,
 		},
-		"plugin-stops-and-keeps-socket": {
+		"keep-socket": {
 			unlinkSocket: false,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			socketDir := initTempDir(t)
-			defer func() {
-				require.NoError(t, os.RemoveAll(socketDir))
-			}()
-
 			// Create new watcher
 			dsw := cache.NewDesiredStateOfWorld()
 			asw := cache.NewActualStateOfWorld()
 			newWatcher(t, socketDir, dsw, asw, wait.NeverStop)
 
 			// Create a plugin
-			pluginName := "test-plugin-disconnect"
-			socketPath := filepath.Join(socketDir, fmt.Sprintf("%s.sock", pluginName))
-			plugin := NewTestExamplePlugin(pluginName, registerapi.DevicePlugin, socketPath, supportedVersions...)
-			defer func() {
-				require.NoError(t, plugin.Stop())
-			}()
+			socketPath := filepath.Join(socketDir, name)
+			plugin := NewTestExamplePlugin("test-plugin-disconnect", registerapi.DevicePlugin, socketPath, supportedVersions...)
+
 			plugin.SetUnlinkSocket(test.unlinkSocket)
 
 			// Run and register it
 			require.NoError(t, plugin.Serve(supportedVersions...))
+			stopPlugin := sync.OnceFunc(func() {
+				require.NoError(t, plugin.Stop())
+			})
+			defer stopPlugin()
+
 			pluginInfo := GetPluginInfo(plugin)
 			require.Equal(t, socketPath, pluginInfo.SocketPath)
 			waitForRegistration(t, socketPath, dsw)
@@ -305,7 +303,7 @@ func TestPluginDisconnect(t *testing.T) {
 			require.NoError(t, asw.AddPlugin(pluginInfo))
 
 			// Stop the plugin
-			require.NoError(t, plugin.Stop())
+			stopPlugin()
 
 			if !test.unlinkSocket {
 				// Ensure that the stalled socket exists after stopping the plugin
@@ -324,10 +322,7 @@ func TestPluginDisconnect(t *testing.T) {
 //  2. Plugin is unstuck.
 //     The PluginConnectionMonitor detects the unstuck plugin and registers it.
 func TestPluginStuckThenUnstuck(t *testing.T) {
-	socketDir := initTempDir(t)
-	defer func() {
-		require.NoError(t, os.RemoveAll(socketDir))
-	}()
+	socketDir := t.TempDir()
 
 	// Create new watcher
 	dsw := cache.NewDesiredStateOfWorld()
@@ -335,15 +330,14 @@ func TestPluginStuckThenUnstuck(t *testing.T) {
 	newWatcher(t, socketDir, dsw, asw, wait.NeverStop)
 
 	// Create a plugin
-	pluginName := "test-plugin-stuck-unstuck"
-	socketPath := filepath.Join(socketDir, fmt.Sprintf("%s.sock", pluginName))
-	plugin := NewTestExamplePlugin(pluginName, registerapi.DevicePlugin, socketPath, supportedVersions...)
-	defer func() {
-		require.NoError(t, plugin.Stop())
-	}()
+	socketPath := filepath.Join(socketDir, "p.sock")
+	plugin := NewTestExamplePlugin("test-stuck-unstuck", registerapi.DevicePlugin, socketPath, supportedVersions...)
 
 	// Run and register it
 	require.NoError(t, plugin.Serve(supportedVersions...))
+	defer func() {
+		require.NoError(t, plugin.Stop())
+	}()
 	pluginInfo := GetPluginInfo(plugin)
 	require.Equal(t, socketPath, pluginInfo.SocketPath)
 	waitForRegistration(t, socketPath, dsw)

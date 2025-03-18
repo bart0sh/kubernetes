@@ -2064,7 +2064,7 @@ func (kl *Kubelet) SyncPod(ctx context.Context, updateType kubetypes.SyncPodType
 	// Use WithoutCancel instead of a new context.TODO() to propagate trace context
 	// Call the container runtime's SyncPod callback
 	sctx := context.WithoutCancel(ctx)
-	result := kl.containerRuntime.SyncPod(sctx, pod, podStatus, pullSecrets, kl.crashLoopBackOff)
+	result := kl.containerRuntime.SyncPod(sctx, pod, podStatus, pullSecrets, kl.crashLoopBackOff, kl.statusManager)
 	kl.reasonCache.Update(pod.UID, result)
 	if err := result.Error(); err != nil {
 		// Do not return error if the only failures were pods in backoff
@@ -2931,8 +2931,15 @@ func (kl *Kubelet) handlePodResourcesResize(pod *v1.Pod, podStatus *kubecontaine
 			return
 		}
 		if kl.isPodResizeInProgress(allocatedPod, podStatus) {
+			// Preserve the old reason and message if there is one, to avoid clearing error messages here.
+			var oc v1.PodCondition
+			for _, c := range kl.statusManager.GetPodResizeConditions(pod.UID) {
+				if c.Type == v1.PodResizeInProgress {
+					oc = *c
+				}
+			}
 			// If a resize is in progress, make sure the cache has the correct state in case the Kubelet restarted.
-			kl.statusManager.SetPodResizeInProgressCondition(pod.UID, "", "")
+			kl.statusManager.SetPodResizeInProgressCondition(pod.UID, oc.Reason, oc.Message)
 		} else {
 			// (Allocated == Actual) => clear the resize in-progress status.
 			kl.statusManager.ClearPodResizeInProgressCondition(pod.UID)
@@ -2961,6 +2968,10 @@ func (kl *Kubelet) handlePodResourcesResize(pod *v1.Pod, podStatus *kubecontaine
 			return nil, err
 		}
 		kl.statusManager.ClearPodResizePendingCondition(pod.UID)
+
+		// Clear any errors that may have been surfaced from a previous resize.
+		kl.statusManager.ClearPodResizeInProgressCondition(pod.UID)
+
 		for i, container := range pod.Spec.Containers {
 			if !apiequality.Semantic.DeepEqual(container.Resources, podFromAllocation.Spec.Containers[i].Resources) {
 				key := kuberuntime.GetStableKey(pod, &container)

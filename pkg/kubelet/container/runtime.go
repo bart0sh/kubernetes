@@ -99,7 +99,7 @@ type Runtime interface {
 	// TODO: Revisit this method and make it cleaner.
 	GarbageCollect(ctx context.Context, gcPolicy GCPolicy, allSourcesReady bool, evictNonDeletedPods bool) error
 	// SyncPod syncs the running pod into the desired pod.
-	SyncPod(ctx context.Context, pod *v1.Pod, podStatus *PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) PodSyncResult
+	SyncPod(ctx context.Context, pod *v1.Pod, podStatus *PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff, resizeInProgressUpdater ResizeInProgressUpdater) PodSyncResult
 	// KillPod kills all the containers of a pod. Pod may be nil, running pod must not be.
 	// TODO(random-liu): Return PodSyncResult in KillPod.
 	// gracePeriodOverride if specified allows the caller to override the pod default grace period.
@@ -182,6 +182,15 @@ type CommandRunner interface {
 	// RunInContainer synchronously executes the command in the container, and returns the output.
 	// If the command completes with a non-0 exit code, a k8s.io/utils/exec.ExitError will be returned.
 	RunInContainer(ctx context.Context, id ContainerID, cmd []string, timeout time.Duration) ([]byte, error)
+}
+
+// ResizeInProgressUpdater interface updates a pod's ResizeInProgress condition.
+type ResizeInProgressUpdater interface {
+	// SetPodResizeInProgressCondition caches the last PodResizeInProgress condition for the pod.
+	SetPodResizeInProgressCondition(podUID types.UID, reason, message string)
+
+	// ClearPodResizeInProgressCondition clears the PodResizeInProgress condition for the pod from the cache.
+	ClearPodResizeInProgressCondition(podUID types.UID)
 }
 
 // Pod is a group of containers.

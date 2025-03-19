@@ -1166,7 +1166,7 @@ func (_c *MockRuntime_Status_Call) RunAndReturn(run func(context.Context) (*cont
 }
 
 // SyncPod provides a mock function with given fields: ctx, pod, podStatus, pullSecrets, backOff
-func (_m *MockRuntime) SyncPod(ctx context.Context, pod *corev1.Pod, podStatus *container.PodStatus, pullSecrets []corev1.Secret, backOff *flowcontrol.Backoff) container.PodSyncResult {
+func (_m *MockRuntime) SyncPod(ctx context.Context, pod *corev1.Pod, podStatus *container.PodStatus, pullSecrets []corev1.Secret, backOff *flowcontrol.Backoff, resizeInProgressUpdater container.ResizeInProgressUpdater) container.PodSyncResult {
 	ret := _m.Called(ctx, pod, podStatus, pullSecrets, backOff)
 
 	if len(ret) == 0 {

@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 
 	"k8s.io/klog/v2"
@@ -90,6 +91,7 @@ func (p *Plugin) getOrCreateGRPCConn() (*grpc.ClientConn, error) {
 			return (&net.Dialer{}).DialContext(ctx, network, target)
 		}),
 		grpc.WithChainUnaryInterceptor(newMetricsInterceptor(p.name)),
+		grpc.WithStatsHandler(p),
 	)
 	if err != nil {
 		return nil, err
@@ -180,3 +182,37 @@ func newMetricsInterceptor(pluginName string) grpc.UnaryClientInterceptor {
 		return err
 	}
 }
+
+func (p *Plugin) HandleConn(ctx context.Context, connStats stats.ConnStats) {
+	logger := klog.FromContext(ctx)
+	switch connStats.(type) {
+	case *stats.ConnBegin:
+		logger.V(2).Info("Connection begin", "plugin", p.name, "endpoint", p.endpoint, "stats", connStats)
+	case *stats.ConnEnd:
+		logger.V(2).Info("Connection end", "plugin", p.name, "endpoint", p.endpoint, "stats", connStats)
+		registrationHandler := func() *RegistrationHandler {
+			p.mutex.Lock()
+			defer p.mutex.Unlock()
+			if p.conn != nil {
+				state := p.conn.GetState()
+				if state != connectivity.Shutdown {
+					logger.V(2).Info("Can't unregister on connection drop: unexpected connection state, expected 'SHUTDOWN'", "plugin", p.name, "endpoint", p.endpoint, "state", state)
+					return nil
+				}
+			}
+			registrationHandler := p.registrationHandler
+			if registrationHandler == nil {
+				logger.V(2).Info("Can't unregister plugin on connection drop: registration handler is nil", "plugin", p.name, "endpoint", p.endpoint)
+				return nil
+			}
+			return registrationHandler
+		}()
+		if registrationHandler != nil {
+			registrationHandler.DeRegisterPlugin(p.name, p.endpoint)
+		}
+	}
+}
+
+func (p *Plugin) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context { return ctx }
+func (p *Plugin) HandleRPC(ctx context.Context, stats stats.RPCStats)                  {}
+func (p *Plugin) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context   { return ctx }

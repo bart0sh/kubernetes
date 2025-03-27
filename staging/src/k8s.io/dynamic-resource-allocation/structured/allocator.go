@@ -972,6 +972,15 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 		return false, nil, nil
 	}
 
+	// Since adminAccess allocations are not tracked, check again that the
+	// device hasn't already been allocated for this claim.
+	if request.adminAccess() && slices.ContainsFunc(alloc.result[r.claimIndex].devices, func(previousResult internalDeviceResult) bool {
+		return previousResult.id == device.id
+	}) {
+		alloc.logger.V(7).Info("Device already allocated for admin access", "device", device.id)
+		return false, nil, nil
+	}
+
 	// The API validation logic has checked the ConsumesCounters referred should exist inside SharedCounters.
 	if alloc.features.PartitionableDevices && len(device.basic.ConsumesCounters) > 0 {
 		// If a device consumes capacity from a capacity pool, verify that

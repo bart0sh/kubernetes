@@ -1152,6 +1152,31 @@ func TestAllocator(t *testing.T) {
 				deviceAllocationResult(req0, driverA, pool1, device2, true),
 			)},
 		},
+		"count-devices-some-allocated-admin-access": {
+			features: Features{
+				AdminAccess: true,
+			},
+			claimsToAllocate: func() []wrapResourceClaim {
+				c := claim(claim0, req0, classA)
+				c.Spec.Devices.Requests[0].AdminAccess = ptr.To(true)
+				c.Spec.Devices.Requests[0].AllocationMode = resourceapi.DeviceAllocationModeExactCount
+				c.Spec.Devices.Requests[0].Count = 2
+				return []wrapResourceClaim{c}
+			}(),
+			allocatedDevices: []DeviceID{
+				MakeDeviceID(driverA, pool1, device1),
+			},
+			classes: objects(class(classA, driverA)),
+			slices: objects(
+				slice(slice1, node1, pool1, driverA, device(device1, nil, nil), device(device2, nil, nil)),
+			),
+			node: node(node1, region1),
+			expectResults: []any{allocationResult(
+				localNodeSelector(node1),
+				deviceAllocationResult(req0, driverA, pool1, device1, true),
+				deviceAllocationResult(req0, driverA, pool1, device2, true),
+			)},
+		},
 		"all-devices-slice-without-devices-prioritized-list": {
 			features: Features{
 				PrioritizedList: true,

@@ -259,7 +259,7 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node) (finalResult []
 	alloc.deviceMatchesRequest = make(map[matchKey]bool)
 
 	// We can estimate the size based on what we need to allocate.
-	alloc.allocatingDevices = make(map[DeviceID]sets.Set[int], minDevicesTotal)
+	alloc.allocatingDevices = make(map[DeviceID]bitfield, minDevicesTotal)
 
 	alloc.logger.V(6).Info("Gathered information about devices", "numAllocated", len(alloc.allocatedDevices), "minDevicesToBeAllocated", minDevicesTotal)
 
@@ -468,8 +468,11 @@ type allocator struct {
 	deviceMatchesRequest map[matchKey]bool
 	constraints          [][]constraint                 // one list of constraints per claim
 	requestData          map[requestIndices]requestData // one entry per request with no subrequests and one entry per subrequest
-	allocatingDevices    map[DeviceID]sets.Set[int]
-	result               []internalAllocationResult
+	// allocatingDevices tracks which devices will be allocated for a
+	// particular attempt to find a solution. The map is indexed by device and
+	// its values represent for which of a pod's claims the device is allocated.
+	allocatingDevices map[DeviceID]bitfield
+	result            []internalAllocationResult
 }
 
 // matchKey identifies a device/request pair.
@@ -1027,10 +1030,7 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 	// and record the result.
 	alloc.logger.V(7).Info("Device allocated", "device", device.id)
 
-	if alloc.allocatingDevices[device.id] == nil {
-		alloc.allocatingDevices[device.id] = make(sets.Set[int])
-	}
-	alloc.allocatingDevices[device.id].Insert(r.claimIndex)
+	alloc.allocatingDevices[device.id] = alloc.allocatingDevices[device.id].set(r.claimIndex)
 
 	result := internalDeviceResult{
 		request:       request.name(),
@@ -1049,7 +1049,7 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 		for _, constraint := range alloc.constraints[r.claimIndex] {
 			constraint.remove(baseRequestName, subRequestName, device.basic, device.id)
 		}
-		alloc.allocatingDevices[device.id].Delete(r.claimIndex)
+		alloc.allocatingDevices[device.id] = alloc.allocatingDevices[device.id].clear(r.claimIndex)
 		// Truncate, but keep the underlying slice.
 		alloc.result[r.claimIndex].devices = alloc.result[r.claimIndex].devices[:previousNumResults]
 		alloc.logger.V(7).Info("Device deallocated", "device", device.id)
@@ -1145,11 +1145,11 @@ func (alloc *allocator) checkAvailableCapacity(device deviceWithID) (bool, error
 }
 
 func (alloc *allocator) allocatingDeviceForAnyClaim(deviceID DeviceID) bool {
-	return alloc.allocatingDevices[deviceID].Len() > 0
+	return alloc.allocatingDevices[deviceID].anySet()
 }
 
 func (alloc *allocator) allocatingDeviceForClaim(deviceID DeviceID, claimIndex int) bool {
-	return alloc.allocatingDevices[deviceID].Has(claimIndex)
+	return alloc.allocatingDevices[deviceID].isSet(int32(claimIndex))
 }
 
 // createNodeSelector constructs a node selector for the allocation, if needed,
@@ -1325,4 +1325,22 @@ func containsNodeSelectorRequirement(requirements []v1.NodeSelectorRequirement, 
 		return true
 	}
 	return false
+}
+
+type bitfield int32
+
+func (b bitfield) set(i int) bitfield {
+	return b | 1<<i
+}
+
+func (b bitfield) clear(i int) bitfield {
+	return b & ^(1 << i)
+}
+
+func (b bitfield) anySet() bool {
+	return b != 0
+}
+
+func (b bitfield) isSet(i int32) bool {
+	return b&1<<i != 0
 }

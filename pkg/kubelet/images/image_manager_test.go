@@ -503,7 +503,10 @@ func (m *mockPodPullingTimeRecorder) RecordImageStartedPulling(podUID types.UID)
 func (m *mockPodPullingTimeRecorder) RecordImageFinishedPulling(podUID types.UID) {
 	m.Lock()
 	defer m.Unlock()
-	m.finishedPullingRecorded = true
+
+	if m.startedPullingRecorded {
+		m.finishedPullingRecorded = true
+	}
 }
 
 func (m *mockPodPullingTimeRecorder) reset() {
@@ -961,3 +964,4 @@ func makeDockercfgSecretForRepo(sMeta metav1.ObjectMeta, repo string) v1.Secret 
 		},
 	}
 }
+

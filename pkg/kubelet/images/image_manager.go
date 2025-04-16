@@ -390,4 +390,3 @@ func trackedToImagePullCreds(trackedCreds *credentialprovider.TrackedAuthConfig)
 
 	return ret
 }
-

@@ -121,6 +121,23 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(pluginRegistrationTimeout).Should(testdriver.BeRegistered)
 		})
 
+		ginkgo.It(">>> must register after registration failure", func(ctx context.Context) {
+			kubeletPlugin := newKubeletPlugin(ctx, f.ClientSet, getNodeName(ctx, f), driverName)
+
+			ginkgo.By("set GetInfo failure mode")
+			unsetGetInfoFailureMode := kubeletPlugin.SetGetInfoFailureMode()
+			ginkgo.By("restart Kubelet")
+			restartKubelet := mustStopKubelet(ctx, f)
+			restartKubelet(ctx)
+
+			ginkgo.By("wait for Registration call to fail")
+			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(retryTestTimeout).Should(testdriver.GetInfoFailed)
+			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(retryTestTimeout).ShouldNot(testdriver.BeRegistered)
+
+			ginkgo.By("unset registration failure mode")
+			unsetGetInfoFailureMode()
+		})
+
 		ginkgo.It("must process pod created when kubelet is not running", func(ctx context.Context) {
 			newKubeletPlugin(ctx, f.ClientSet, getNodeName(ctx, f), driverName)
 

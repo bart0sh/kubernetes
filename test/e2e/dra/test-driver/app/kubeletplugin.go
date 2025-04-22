@@ -554,3 +554,7 @@ func (ex *ExamplePlugin) CountCalls(methodSuffix string) int {
 func (ex *ExamplePlugin) UpdateStatus(ctx context.Context, resourceClaim *resourceapi.ResourceClaim) (*resourceapi.ResourceClaim, error) {
 	return ex.kubeClient.ResourceV1beta1().ResourceClaims(resourceClaim.Namespace).UpdateStatus(ctx, resourceClaim, metav1.UpdateOptions{})
 }
+
+func (ex *ExamplePlugin) SetGetInfoFailureMode() func() {
+	return ex.d.SetGetInfoFailureMode()
+}

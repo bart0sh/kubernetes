@@ -18,7 +18,9 @@ package kubeletplugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
 	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 )
@@ -29,12 +31,18 @@ type registrationServer struct {
 	endpoint          string
 	supportedVersions []string
 	status            *registerapi.RegistrationStatus
+
+	getInfoFailure   error
+	failGetInfoMutex sync.Mutex
 }
 
 var _ registerapi.RegistrationServer = &registrationServer{}
 
 // GetInfo is the RPC invoked by plugin watcher.
 func (e *registrationServer) GetInfo(ctx context.Context, req *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
+	if failure := e.getGetInfoFailure(); failure != nil {
+		return nil, failure
+	}
 	return &registerapi.PluginInfo{
 		Type:              registerapi.DRAPlugin,
 		Name:              e.driverName,
@@ -51,4 +59,21 @@ func (e *registrationServer) NotifyRegistrationStatus(ctx context.Context, statu
 	}
 
 	return &registerapi.RegistrationStatusResponse{}, nil
+}
+
+func (e *registrationServer) getGetInfoFailure() error {
+	e.failGetInfoMutex.Lock()
+	defer e.failGetInfoMutex.Unlock()
+	return e.getInfoFailure
+}
+func (e *registrationServer) setGetInfoFailureMode() func() {
+	e.failGetInfoMutex.Lock()
+	defer e.failGetInfoMutex.Unlock()
+	e.getInfoFailure = errors.New("simulated registration failure")
+
+	return func() {
+		e.failGetInfoMutex.Lock()
+		e.getInfoFailure = nil
+		e.failGetInfoMutex.Unlock()
+	}
 }

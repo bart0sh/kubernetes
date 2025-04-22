@@ -644,6 +644,10 @@ func (d *Helper) RegistrationStatus() *registerapi.RegistrationStatus {
 	return d.registrar.status
 }
 
+func (d *Helper) SetGetInfoFailureMode() func() {
+	return d.registrar.registrationServer.setGetInfoFailureMode()
+}
+
 // serializeGRPCIfEnabled locks a mutex if serialization is enabled.
 // Either way it returns a method that the caller must invoke
 // via defer.

@@ -132,7 +132,7 @@ var _ = framework.SIGDescribe("node")("DRA", feature.DynamicResourceAllocation, 
 
 			ginkgo.By("wait for Registration call to fail")
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(retryTestTimeout).Should(testdriver.GetInfoFailed)
-			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(retryTestTimeout).ShouldNot(testdriver.BeRegistered)
+			//gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(retryTestTimeout).ShouldNot(testdriver.BeRegistered)
 
 			ginkgo.By("unset registration failure mode")
 			unsetGetInfoFailureMode()

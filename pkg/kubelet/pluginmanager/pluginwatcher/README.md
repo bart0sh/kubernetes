@@ -22,6 +22,46 @@ should end with a DNS domain that is unique for the plugin. Each time a plugin
 starts, it has to delete old sockets if they exist and listen anew under the
 same filename.
 
+## Monitoring Plugin Connection
+
+The Kubelet monitors the gRPC connection to a plugin's **service socket** using a
+[gRPC stats handler](https://github.com/grpc/grpc-go/blob/master/examples/features/stats_monitoring/README.md).
+
+This enables the Kubelet to:
+- Detect when the plugin process has crashed, exited, or restarted
+- Deregister the plugin immediately when the connection is lost
+- Trigger cleanup of the plugin’s resources
+
+**registration socket** is monitored by the plugin manager. It registers the
+plugin when registration socket is created by the plugin and deregisters the
+plugin when socket is removed. After registration, the plugin begins serving
+gRPC requests over the **service socket**. Monitoring this service socket is
+therefore more accurate for detecting the real availability of the plugin.
+
+### How It Works
+
+Internally, the plugin client configures a gRPC stats handler to observe
+`ConnBegin` and `ConnEnd` events on the service socket connection. The
+connection is established over a Unix Domain Socket, which provides reliable
+semantics — if the connection drops, it definitively indicates that the plugin
+closed its end (e.g., due to crash or shutdown).
+
+1. After successful plugin registration, the client dials the plugin’s
+   **service socket** and attaches the stats handler.
+2. A long-lived gRPC connection is established and actively monitored.
+3. If the plugin process exits and the connection drops, the stats handler
+   observes a `ConnEnd` event.
+4. This immediately triggers plugin deregistration and removal from the plugin
+   manager’s desired state of the world.
+5. If the plugin connects again, the stats handler observes a `ConnBegin` event
+   and adds the plugin to the plugin manager’s desired state of the world, which
+   triggers plugin re-registration.
+6. If the plugin restarts it must explicitly re-register with the Kubelet. This
+   ensures that the Kubelet only interacts with plugins that are fully initialized
+   and healthy.
+
+**Warning**: Monitoring the plugin connection is only supported for DRA at the moment.
+
 ## Seamless Upgrade
 
 To avoid downtime of a plugin on a node, it would be nice to support running an

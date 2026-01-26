@@ -401,6 +401,7 @@ func newTestKubeletWithImageList(
 
 	// setup shutdown manager
 	shutdownManager := nodeshutdown.NewManager(&nodeshutdown.Config{
+		Context:                         context.Background(),
 		Logger:                          logger,
 		Recorder:                        fakeRecorder,
 		NodeRef:                         nodeRef,
@@ -434,7 +435,7 @@ func newTestKubeletWithImageList(
 
 	var prober volume.DynamicPluginProber // TODO (#51147) inject mock
 	kubelet.volumePluginMgr, err =
-		NewInitializedVolumePluginMgr(kubelet, kubelet.secretManager, kubelet.configMapManager, token.NewManager(kubelet.kubeClient), &clustertrustbundle.NoopManager{}, allPlugins, prober)
+		NewInitializedVolumePluginMgr(kubelet, logger, kubelet.secretManager, kubelet.configMapManager, token.NewManager(kubelet.kubeClient), &clustertrustbundle.NoopManager{}, allPlugins, prober)
 	require.NoError(t, err, "Failed to initialize VolumePluginMgr")
 
 	kubelet.volumeManager = kubeletvolume.NewVolumeManager(
@@ -3074,7 +3075,6 @@ func TestSyncTerminatingPodKillPod(t *testing.T) {
 }
 
 func TestSyncLabels(t *testing.T) {
-	tCtx := ktesting.Init(t)
 	tests := []struct {
 		name             string
 		existingNode     *v1.Node
@@ -3104,6 +3104,7 @@ func TestSyncLabels(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ctx := ktesting.Init(t)
 			testKubelet := newTestKubelet(t, false)
 			defer testKubelet.Cleanup()
 			kl := testKubelet.kubelet
@@ -3112,7 +3113,7 @@ func TestSyncLabels(t *testing.T) {
 			test.existingNode.Name = string(kl.nodeName)
 
 			kl.nodeLister = testNodeLister{nodes: []*v1.Node{test.existingNode}}
-			go func() { kl.syncNodeStatus(tCtx) }()
+			go func() { kl.syncNodeStatus(ctx) }()
 
 			err := retryWithExponentialBackOff(
 				100*time.Millisecond,

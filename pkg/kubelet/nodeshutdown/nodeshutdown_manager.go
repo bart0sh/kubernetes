@@ -48,6 +48,12 @@ type Manager interface {
 
 // Config represents Manager configuration
 type Config struct {
+	// Context controls the lifetime of background operations started by the
+	// node shutdown manager. It should typically be the Kubelet context so that
+	// shutdown-related goroutines are stopped when Kubelet is terminating.
+	//
+	// If nil, a background context is used.
+	Context                          context.Context
 	Logger                           klog.Logger
 	VolumeManager                    volumemanager.VolumeManager
 	Recorder                         record.EventRecorder
@@ -91,6 +97,7 @@ const (
 
 // podManager is responsible for killing active pods by priority.
 type podManager struct {
+	ctx                              context.Context
 	logger                           klog.Logger
 	shutdownGracePeriodByPodPriority []kubeletconfig.ShutdownGracePeriodByPodPriority
 	clock                            clock.Clock
@@ -99,6 +106,11 @@ type podManager struct {
 }
 
 func newPodManager(conf *Config) *podManager {
+	ctx := conf.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	shutdownGracePeriodByPodPriority := conf.ShutdownGracePeriodByPodPriority
 
 	// Migration from the original configuration
@@ -117,6 +129,7 @@ func newPodManager(conf *Config) *podManager {
 	}
 
 	return &podManager{
+		ctx:                              ctx,
 		logger:                           conf.Logger,
 		shutdownGracePeriodByPodPriority: shutdownGracePeriodByPodPriority,
 		clock:                            conf.Clock,
@@ -178,7 +191,7 @@ func (m *podManager) killPods(activePods []*v1.Pod) error {
 		var (
 			doneCh         = make(chan struct{})
 			timer          = m.clock.NewTimer(groupTerminationWaitDuration)
-			ctx, ctxCancel = context.WithTimeout(context.Background(), groupTerminationWaitDuration)
+			ctx, ctxCancel = context.WithTimeout(m.ctx, groupTerminationWaitDuration)
 		)
 		go func() {
 			defer close(doneCh)

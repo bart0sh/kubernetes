@@ -235,9 +235,10 @@ func (g *GenericPLEG) Relist() {
 	g.relistLock.Lock()
 	defer g.relistLock.Unlock()
 
-	ctx := context.Background()
+	ctx := klog.NewContext(context.Background(), g.logger)
+	logger := klog.FromContext(ctx)
 
-	g.logger.V(5).Info("GenericPLEG: Relisting")
+	logger.V(5).Info("GenericPLEG: Relisting")
 
 	if lastRelistTime := g.getRelistTime(); !lastRelistTime.IsZero() {
 		metrics.PLEGRelistInterval.Observe(metrics.SinceInSeconds(lastRelistTime))
@@ -251,7 +252,7 @@ func (g *GenericPLEG) Relist() {
 	// Get all the pods.
 	podList, err := g.runtime.GetPods(ctx, true)
 	if err != nil {
-		g.logger.Error(err, "GenericPLEG: Unable to retrieve pods")
+		logger.Error(err, "GenericPLEG: Unable to retrieve pods")
 		return
 	}
 
@@ -273,7 +274,7 @@ func (g *GenericPLEG) Relist() {
 		allContainers := getContainersFromPods(oldPod, pod)
 		var events []*PodLifecycleEvent
 		for _, container := range allContainers {
-			containerEvents := computeEvents(g.logger, oldPod, pod, &container.ID)
+			containerEvents := computeEvents(logger, oldPod, pod, &container.ID)
 			events = append(events, containerEvents...)
 		}
 
@@ -297,7 +298,7 @@ func (g *GenericPLEG) Relist() {
 		status, updated, err := g.updateCache(ctx, pod, pid)
 		if err != nil {
 			// Rely on updateCache calling GetPodStatus to log the actual error.
-			g.logger.V(4).Info("PLEG: Ignoring events for pod", "pod", klog.KRef(pod.Namespace, pod.Name), "err", err)
+			logger.V(4).Info("PLEG: Ignoring events for pod", "pod", klog.KRef(pod.Namespace, pod.Name), "err", err)
 
 			// make sure we try to reinspect the pod during the next relisting
 			needsReinspection[pid] = pod
@@ -339,7 +340,7 @@ func (g *GenericPLEG) Relist() {
 			case g.eventChannel <- events[i]:
 			default:
 				metrics.PLEGDiscardEvents.Inc()
-				g.logger.Error(nil, "Event channel is full, discard this relist() cycle event")
+				logger.Error(nil, "Event channel is full, discard this relist() cycle event")
 			}
 			// Log exit code of containers when they finished in a particular event
 			if events[i].Type == ContainerDied {
@@ -353,7 +354,7 @@ func (g *GenericPLEG) Relist() {
 				}
 				if containerID, ok := events[i].Data.(string); ok {
 					if exitCode, ok := containerExitCode[containerID]; ok && pod != nil {
-						g.logger.V(2).Info("Generic (PLEG): container finished", "podID", pod.ID, "containerID", containerID, "exitCode", exitCode)
+						logger.V(2).Info("Generic (PLEG): container finished", "podID", pod.ID, "containerID", containerID, "exitCode", exitCode)
 					}
 				}
 			}
@@ -434,10 +435,11 @@ func (g *GenericPLEG) getPodIPs(pid types.UID, status *kubecontainer.PodStatus) 
 // pod status was actually updated in the cache. It will return false if the pod status
 // was ignored by the cache.
 func (g *GenericPLEG) updateCache(ctx context.Context, pod *kubecontainer.Pod, pid types.UID) (*kubecontainer.PodStatus, bool, error) {
+	logger := klog.FromContext(ctx)
 	if pod == nil {
 		// The pod is missing in the current relist. This means that
 		// the pod has no visible (active or inactive) containers.
-		g.logger.V(4).Info("PLEG: Delete status for pod", "podUID", string(pid))
+		logger.V(4).Info("PLEG: Delete status for pod", "podUID", string(pid))
 		g.cache.Delete(pid)
 		return nil, true, nil
 	}
@@ -449,16 +451,16 @@ func (g *GenericPLEG) updateCache(ctx context.Context, pod *kubecontainer.Pod, p
 		// nolint:logcheck // Not using the result of klog.V inside the
 		// if branch is okay, we just use it to determine whether the
 		// additional "podStatus" key and its value should be added.
-		if klog.V(6).Enabled() {
-			g.logger.Error(err, "PLEG: Write status", "pod", klog.KRef(pod.Namespace, pod.Name), "podStatus", status)
+		if logger.V(6).Enabled() {
+			logger.Error(err, "PLEG: Write status", "pod", klog.KRef(pod.Namespace, pod.Name), "podStatus", status)
 		} else {
-			g.logger.Error(err, "PLEG: Write status", "pod", klog.KRef(pod.Namespace, pod.Name))
+			logger.Error(err, "PLEG: Write status", "pod", klog.KRef(pod.Namespace, pod.Name))
 		}
 	} else {
-		if klogV := g.logger.V(6); klogV.Enabled() {
-			g.logger.Info("PLEG: Write status", "pod", klog.KRef(pod.Namespace, pod.Name), "podStatus", status)
+		if klogV := logger.V(6); klogV.Enabled() {
+			logger.Info("PLEG: Write status", "pod", klog.KRef(pod.Namespace, pod.Name), "podStatus", status)
 		} else {
-			g.logger.V(4).Info("PLEG: Write status", "pod", klog.KRef(pod.Namespace, pod.Name))
+			logger.V(4).Info("PLEG: Write status", "pod", klog.KRef(pod.Namespace, pod.Name))
 		}
 		// Preserve the pod IP across cache updates if the new IP is empty.
 		// When a pod is torn down, kubelet may race with PLEG and retrieve

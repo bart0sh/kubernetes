@@ -237,11 +237,13 @@ func Test_managerImpl_ProcessShutdownEvent(t *testing.T) {
 				logger:                logger,
 				recorder:              tt.fields.recorder,
 				nodeRef:               tt.fields.nodeRef,
+				ctx:                   context.Background(),
 				getPods:               tt.fields.getPods,
 				syncNodeStatus:        tt.fields.syncNodeStatus,
 				nodeShuttingDownMutex: sync.Mutex{},
 				nodeShuttingDownNow:   tt.fields.nodeShuttingDownNow,
 				podManager: &podManager{
+					ctx:                              context.Background(),
 					logger:                           logger,
 					volumeManager:                    tt.fields.volumeManager,
 					shutdownGracePeriodByPodPriority: tt.fields.shutdownGracePeriodByPodPriority,

@@ -7444,7 +7444,8 @@ func TestKubelet_HandlePodCleanups(t *testing.T) {
 			defer testKubelet.Cleanup()
 			kl := testKubelet.kubelet
 
-			podWorkers, _, processed := createPodWorkers()
+			logger, _ := ktesting.NewTestContext(t)
+			podWorkers, _, processed := createPodWorkers(logger)
 			kl.podWorkers = podWorkers
 			originalPodSyncer := podWorkers.podSyncer
 			syncFuncs := newPodSyncerFuncs(originalPodSyncer)

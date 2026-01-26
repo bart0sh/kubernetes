@@ -303,7 +303,7 @@ func TestManager(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
-			logger, tCtx := ktesting.NewTestContext(t)
+			logger, _ := ktesting.NewTestContext(t)
 
 			activePodsFunc := func() []*v1.Pod {
 				return tc.activePods
@@ -344,14 +344,14 @@ func TestManager(t *testing.T) {
 				NodeRef:                         nodeRef,
 				GetPodsFunc:                     activePodsFunc,
 				KillPodFunc:                     killPodsFunc,
-				SyncNodeStatusFunc:              func(context context.Context) {},
+				SyncNodeStatusFunc:              func(context.Context) {},
 				ShutdownGracePeriodRequested:    tc.shutdownGracePeriodRequested,
 				ShutdownGracePeriodCriticalPods: tc.shutdownGracePeriodCriticalPods,
 				Clock:                           testingclock.NewFakeClock(time.Now()),
 				StateDirectory:                  os.TempDir(),
 			})
 
-			err := manager.Start(tCtx)
+			err := manager.Start()
 			lock.Unlock()
 
 			if tc.expectedError != nil {
@@ -460,7 +460,9 @@ func TestFeatureEnabled(t *testing.T) {
 }
 
 func TestRestart(t *testing.T) {
-	logger, tCtx := ktesting.NewTestContext(t)
+	logger, _ := ktesting.NewTestContext(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	systemDbusTmp := systemDbus
 	defer func() {
 		systemDbus = systemDbusTmp
@@ -499,6 +501,7 @@ func TestRestart(t *testing.T) {
 	fakeVolumeManager := volumemanager.NewFakeVolumeManager([]v1.UniqueVolumeName{}, 0, nil, false)
 	nodeRef := &v1.ObjectReference{Kind: "Node", Name: "test", UID: types.UID("test"), Namespace: ""}
 	manager := NewManager(&Config{
+		Context:                         ctx,
 		Logger:                          logger,
 		VolumeManager:                   fakeVolumeManager,
 		Recorder:                        fakeRecorder,
@@ -511,7 +514,7 @@ func TestRestart(t *testing.T) {
 		StateDirectory:                  os.TempDir(),
 	})
 
-	err := manager.Start(tCtx)
+	err := manager.Start()
 	lock.Unlock()
 
 	if err != nil {
@@ -528,6 +531,82 @@ func TestRestart(t *testing.T) {
 		shutdownChanMut.Lock()
 		close(shutdownChan)
 		shutdownChanMut.Unlock()
+	}
+}
+
+func TestManager_ContextCancellationStopsSyncNodeStatus(t *testing.T) {
+	systemDbusTmp := systemDbus
+	defer func() {
+		systemDbus = systemDbusTmp
+	}()
+
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.GracefulNodeShutdown, true)
+
+	logger, _ := ktesting.NewTestContext(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	shutdownCh := make(chan bool, 1)
+
+	lock.Lock()
+	systemDbus = func() (dbusInhibiter, error) {
+		dbus := &fakeDbus{currentInhibitDelay: 40 * time.Second, shutdownChan: shutdownCh, overrideSystemInhibitDelay: 40 * time.Second}
+		return dbus, nil
+	}
+
+	syncStarted := make(chan context.Context, 1)
+	syncDone := make(chan struct{})
+
+	fakeRecorder := &record.FakeRecorder{}
+	fakeVolumeManager := volumemanager.NewFakeVolumeManager([]v1.UniqueVolumeName{}, 0, nil, false)
+	nodeRef := &v1.ObjectReference{Kind: "Node", Name: "test", UID: types.UID("test"), Namespace: ""}
+
+	manager := NewManager(&Config{
+		Context:       ctx,
+		Logger:        logger,
+		VolumeManager: fakeVolumeManager,
+		Recorder:      fakeRecorder,
+		NodeRef:       nodeRef,
+		GetPodsFunc:   func() []*v1.Pod { return nil },
+		KillPodFunc: func(*v1.Pod, bool, *int64, func(*v1.PodStatus)) error {
+			return nil
+		},
+		SyncNodeStatusFunc: func(c context.Context) {
+			syncStarted <- c
+			<-c.Done()
+			close(syncDone)
+		},
+		ShutdownGracePeriodRequested:    30 * time.Second,
+		ShutdownGracePeriodCriticalPods: 10 * time.Second,
+		StateDirectory:                  os.TempDir(),
+	})
+
+	err := manager.Start()
+	lock.Unlock()
+	require.NoError(t, err)
+
+	shutdownCh <- true
+
+	var syncCtx context.Context
+	select {
+	case syncCtx = <-syncStarted:
+	case <-time.After(1 * time.Second):
+		t.Fatalf("syncNodeStatus was not started")
+	}
+
+	cancel()
+
+	select {
+	case <-syncCtx.Done():
+	case <-time.After(1 * time.Second):
+		t.Fatalf("expected syncNodeStatus context to be cancelled")
+	}
+
+	select {
+	case <-syncDone:
+	case <-time.After(1 * time.Second):
+		t.Fatalf("expected syncNodeStatus goroutine to exit after cancellation")
 	}
 }
 
@@ -605,6 +684,7 @@ func Test_managerImpl_processShutdownEvent(t *testing.T) {
 				logger:                logger,
 				recorder:              tt.fields.recorder,
 				nodeRef:               tt.fields.nodeRef,
+				ctx:                   context.Background(),
 				getPods:               tt.fields.getPods,
 				syncNodeStatus:        tt.fields.syncNodeStatus,
 				dbusCon:               tt.fields.dbusCon,
@@ -612,6 +692,7 @@ func Test_managerImpl_processShutdownEvent(t *testing.T) {
 				nodeShuttingDownMutex: sync.Mutex{},
 				nodeShuttingDownNow:   tt.fields.nodeShuttingDownNow,
 				podManager: &podManager{
+					ctx:                              context.Background(),
 					logger:                           logger,
 					volumeManager:                    tt.fields.volumeManager,
 					shutdownGracePeriodByPodPriority: tt.fields.shutdownGracePeriodByPodPriority,
@@ -658,6 +739,7 @@ func Test_processShutdownEvent_VolumeUnmountTimeout(t *testing.T) {
 		logger:   logger,
 		recorder: fakeRecorder,
 		nodeRef:  nodeRef,
+		ctx:      context.Background(),
 		getPods: func() []*v1.Pod {
 			return []*v1.Pod{
 				makePod("test-pod", 1, nil),
@@ -666,6 +748,7 @@ func Test_processShutdownEvent_VolumeUnmountTimeout(t *testing.T) {
 		syncNodeStatus: syncNodeStatus,
 		dbusCon:        &fakeDbus{},
 		podManager: &podManager{
+			ctx:           context.Background(),
 			logger:        logger,
 			volumeManager: fakeVolumeManager,
 			shutdownGracePeriodByPodPriority: []kubeletconfig.ShutdownGracePeriodByPodPriority{
@@ -699,4 +782,64 @@ func Test_processShutdownEvent_VolumeUnmountTimeout(t *testing.T) {
 	log := underlier.GetBuffer().String()
 	expectedLogMessage := "Failed while waiting for all the volumes belonging to Pods in this group to unmount"
 	assert.Contains(t, log, expectedLogMessage, "Expected log message not found")
+}
+
+func Test_processShutdownEvent_VolumeUnmountCancelledByManagerContext(t *testing.T) {
+	var (
+		fakeRecorder   = &record.FakeRecorder{}
+		nodeRef        = &v1.ObjectReference{Kind: "Node", Name: "test", UID: types.UID("test"), Namespace: ""}
+		fakeclock      = testingclock.NewFakeClock(time.Now())
+		syncNodeStatus = func(context.Context) {}
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	fakeVolumeManager := volumemanager.NewFakeVolumeManager(
+		[]v1.UniqueVolumeName{},
+		10*time.Second,
+		nil,
+		false,
+	)
+	logger := ktesting.NewLogger(t, ktesting.NewConfig(ktesting.BufferLogs(true)))
+
+	m := &managerImpl{
+		logger:         logger,
+		recorder:       fakeRecorder,
+		nodeRef:        nodeRef,
+		ctx:            ctx,
+		syncNodeStatus: syncNodeStatus,
+		dbusCon:        &fakeDbus{},
+		getPods: func() []*v1.Pod {
+			return []*v1.Pod{makePod("test-pod", 1, nil)}
+		},
+		podManager: &podManager{
+			ctx:           ctx,
+			logger:        logger,
+			volumeManager: fakeVolumeManager,
+			shutdownGracePeriodByPodPriority: []kubeletconfig.ShutdownGracePeriodByPodPriority{{
+				Priority:                   1,
+				ShutdownGracePeriodSeconds: 30,
+			}},
+			killPodFunc: func(pod *v1.Pod, isEvicted bool, gracePeriodOverride *int64, fn func(*v1.PodStatus)) error {
+				return nil
+			},
+			clock: fakeclock,
+		},
+	}
+
+	doneCh := make(chan struct{})
+	go func() {
+		_ = m.processShutdownEvent()
+		close(doneCh)
+	}()
+
+	// Cancel should interrupt the unmount wait; if a background context is used,
+	// this test would block until unmountDelay or group grace period.
+	cancel()
+
+	select {
+	case <-doneCh:
+	case <-time.After(1 * time.Second):
+		t.Fatalf("expected processShutdownEvent to exit after cancellation")
+	}
 }

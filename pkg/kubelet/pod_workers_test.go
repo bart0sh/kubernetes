@@ -34,12 +34,14 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/kubelet/allocation"
 	"k8s.io/kubernetes/pkg/kubelet/cm"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	containertest "k8s.io/kubernetes/pkg/kubelet/container/testing"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 	"k8s.io/kubernetes/pkg/kubelet/util/queue"
+	"k8s.io/kubernetes/test/utils/ktesting"
 	"k8s.io/utils/clock"
 	clocktesting "k8s.io/utils/clock/testing"
 )
@@ -370,7 +372,7 @@ func (w *timeIncrementingWorkers) tick() {
 // although multiple workers will advance the clock in an unpredictable order. Use to observe
 // successive internal updates to each update pod state when only a single pod is being updated.
 func createTimeIncrementingPodWorkers() (*timeIncrementingWorkers, map[types.UID][]syncPodRecord) {
-	nested, runtime, processed := createPodWorkers()
+	nested, runtime, processed := createPodWorkers(klog.Background())
 	w := &timeIncrementingWorkers{
 		w:       nested,
 		runtime: runtime,
@@ -392,7 +394,11 @@ func createTimeIncrementingPodWorkers() (*timeIncrementingWorkers, map[types.UID
 	return w, processed
 }
 
-func createPodWorkers() (*podWorkers, *containertest.FakeRuntime, map[types.UID][]syncPodRecord) {
+func createPodWorkers(logger klog.Logger) (*podWorkers, *containertest.FakeRuntime, map[types.UID][]syncPodRecord) {
+	return createPodWorkersWithLogger(logger)
+}
+
+func createPodWorkersWithLogger(_ klog.Logger) (*podWorkers, *containertest.FakeRuntime, map[types.UID][]syncPodRecord) {
 	lock := sync.Mutex{}
 	processed := make(map[types.UID][]syncPodRecord)
 	fakeRecorder := &record.FakeRecorder{}
@@ -524,7 +530,7 @@ func drainAllWorkers(podWorkers *podWorkers) {
 }
 
 func TestUpdatePodParallel(t *testing.T) {
-	podWorkers, _, processed := createPodWorkers()
+	podWorkers, _, processed := createPodWorkers(klog.Background())
 
 	numPods := 20
 	for i := 0; i < numPods; i++ {
@@ -581,6 +587,17 @@ func TestUpdatePod(t *testing.T) {
 		t.Helper()
 		// handle special non-comparable fields
 		if status != nil {
+			clearLogger := func(opts *UpdatePodOptions) {
+				if opts == nil {
+					return
+				}
+				opts.Logger = klog.Logger{}
+			}
+			clearLogger(expected.pendingUpdate)
+			clearLogger(expected.activeUpdate)
+			clearLogger(status.pendingUpdate)
+			clearLogger(status.activeUpdate)
+
 			if e, a := expected.ctx != nil, status.ctx != nil; e != a {
 				t.Errorf("expected context %t, has context %t", e, a)
 			} else {
@@ -997,7 +1014,7 @@ func TestCompleteWork_Enqueue(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			podWorkers, _, _ := createPodWorkers()
+			podWorkers, _, _ := createPodWorkers(klog.Background())
 			podWorkers.clock = clock
 			fakeQueue := podWorkers.workQueue.(*fakeQueue)
 			podUID := types.UID("12345")
@@ -1005,7 +1022,7 @@ func TestCompleteWork_Enqueue(t *testing.T) {
 			podWorkers.resyncInterval = resyncInterval
 			podWorkers.backOffPeriod = defaultBackoff
 			podWorkers.podSyncStatuses[podUID] = &podSyncStatus{}
-			podWorkers.completeWork(podUID, tc.phaseTransition, tc.syncErr)
+			podWorkers.completeWork(klog.Background(), podUID, tc.phaseTransition, tc.syncErr)
 
 			if fakeQueue.Empty() {
 				t.Fatalf("work queue should not be empty")
@@ -1037,7 +1054,7 @@ func TestCompleteWork_PendingUpdate(t *testing.T) {
 		}
 		p.podSyncStatuses[podUID] = &podSyncStatus{working: true, pendingUpdate: nil}
 
-		p.completeWork(podUID, false, nil)
+		p.completeWork(klog.Background(), podUID, false, nil)
 
 		p.podLock.Lock()
 		defer p.podLock.Unlock()
@@ -1059,7 +1076,7 @@ func TestCompleteWork_PendingUpdate(t *testing.T) {
 		}
 		p.podSyncStatuses[podUID] = &podSyncStatus{working: true, pendingUpdate: dummyUpdate}
 
-		p.completeWork(podUID, false, nil)
+		p.completeWork(klog.Background(), podUID, false, nil)
 
 		select {
 		case <-p.podUpdates[podUID]:
@@ -1071,7 +1088,7 @@ func TestCompleteWork_PendingUpdate(t *testing.T) {
 }
 
 func TestUpdatePodForRuntimePod(t *testing.T) {
-	podWorkers, _, processed := createPodWorkers()
+	podWorkers, _, processed := createPodWorkers(klog.Background())
 
 	// ignores running pod of wrong sync type
 	podWorkers.UpdatePod(UpdatePodOptions{
@@ -1102,7 +1119,7 @@ func TestUpdatePodForRuntimePod(t *testing.T) {
 }
 
 func TestUpdatePodForTerminatedRuntimePod(t *testing.T) {
-	podWorkers, _, processed := createPodWorkers()
+	podWorkers, _, processed := createPodWorkers(klog.Background())
 
 	now := time.Now()
 	podWorkers.podSyncStatuses[types.UID("1")] = &podSyncStatus{
@@ -1128,7 +1145,7 @@ func TestUpdatePodForTerminatedRuntimePod(t *testing.T) {
 }
 
 func TestUpdatePodDoesNotForgetSyncPodKill(t *testing.T) {
-	podWorkers, _, processed := createPodWorkers()
+	podWorkers, _, processed := createPodWorkers(klog.Background())
 	numPods := 20
 	for i := 0; i < numPods; i++ {
 		pod := newNamedPod(strconv.Itoa(i), "ns", strconv.Itoa(i), false)
@@ -1213,7 +1230,7 @@ func newTerminalPhaseSync(fn syncPodFnType) *terminalPhaseSync {
 }
 
 func TestTerminalPhaseTransition(t *testing.T) {
-	podWorkers, _, _ := createPodWorkers()
+	podWorkers, _, _ := createPodWorkers(klog.Background())
 	var channels WorkChannel
 	podWorkers.workerChannelFn = channels.Intercept
 	terminalPhaseSyncer := newTerminalPhaseSync(podWorkers.podSyncer.(*podSyncerFuncs).syncPod)
@@ -1265,7 +1282,7 @@ func TestStaticPodExclusion(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	podWorkers, _, processed := createPodWorkers()
+	podWorkers, _, processed := createPodWorkers(klog.Background())
 	var channels WorkChannel
 	podWorkers.workerChannelFn = channels.Intercept
 
@@ -1741,7 +1758,7 @@ func (w *WorkChannel) Intercept(uid types.UID, ch chan struct{}) (outCh <-chan s
 }
 
 func TestSyncKnownPods(t *testing.T) {
-	podWorkers, _, _ := createPodWorkers()
+	podWorkers, _, _ := createPodWorkers(klog.Background())
 
 	numPods := 20
 	for i := 0; i < numPods; i++ {
@@ -2048,7 +2065,7 @@ func Test_removeTerminatedWorker(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			podWorkers, _, _ := createPodWorkers()
+			podWorkers, _, _ := createPodWorkers(klog.Background())
 			podWorkers.podSyncStatuses[podUID] = tc.podSyncStatus
 			podWorkers.podUpdates[podUID] = make(chan struct{}, 1)
 			if tc.podSyncStatus.working {
@@ -2119,6 +2136,7 @@ func (kl *simpleFakeKubelet) SyncTerminatedPod(ctx context.Context, pod *v1.Pod,
 // TestFakePodWorkers verifies that the fakePodWorkers behaves the same way as the real podWorkers
 // for their invocation of the syncPodFn.
 func TestFakePodWorkers(t *testing.T) {
+	_, _ = ktesting.NewTestContext(t)
 	fakeRecorder := &record.FakeRecorder{}
 	fakeRuntime := &containertest.FakeRuntime{}
 	fakeCache := containertest.NewFakeCache(fakeRuntime)
@@ -2193,7 +2211,7 @@ func TestFakePodWorkers(t *testing.T) {
 // TestKillPodNowFunc tests the blocking kill pod function works with pod workers as expected.
 func TestKillPodNowFunc(t *testing.T) {
 	fakeRecorder := &record.FakeRecorder{}
-	podWorkers, _, processed := createPodWorkers()
+	podWorkers, _, processed := createPodWorkers(klog.Background())
 	killPodFunc := killPodNow(podWorkers, fakeRecorder)
 	pod := newNamedPod("test", "ns", "test", false)
 	gracePeriodOverride := int64(0)
@@ -2525,7 +2543,7 @@ func Test_allowPodStart(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			podWorkers, _, _ := createPodWorkers()
+			podWorkers, _, _ := createPodWorkers(klog.Background())
 			if tc.podSyncStatuses != nil {
 				podWorkers.podSyncStatuses = tc.podSyncStatuses
 			}
@@ -2535,7 +2553,7 @@ func Test_allowPodStart(t *testing.T) {
 			if tc.waitingToStartStaticPodsByFullname != nil {
 				podWorkers.waitingToStartStaticPodsByFullname = tc.waitingToStartStaticPodsByFullname
 			}
-			allowed, allowedEver := podWorkers.allowPodStart(tc.pod)
+			allowed, allowedEver := podWorkers.allowPodStart(klog.Background(), tc.pod)
 			if allowed != tc.allowed {
 				if tc.allowed {
 					t.Errorf("Pod should be allowed")

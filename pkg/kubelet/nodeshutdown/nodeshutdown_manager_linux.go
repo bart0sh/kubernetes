@@ -61,6 +61,7 @@ type managerImpl struct {
 	logger   klog.Logger
 	recorder record.EventRecorder
 	nodeRef  *v1.ObjectReference
+	ctx      context.Context
 
 	getPods        eviction.ActivePodsFunc
 	syncNodeStatus func(context.Context)
@@ -91,10 +92,16 @@ func NewManager(conf *Config) Manager {
 		return m
 	}
 
+	managerCtx := conf.Context
+	if managerCtx == nil {
+		managerCtx = context.Background()
+	}
+
 	manager := &managerImpl{
 		logger:         conf.Logger,
 		recorder:       conf.Recorder,
 		nodeRef:        conf.NodeRef,
+		ctx:            managerCtx,
 		getPods:        conf.GetPodsFunc,
 		syncNodeStatus: conf.SyncNodeStatusFunc,
 		podManager:     podManager,
@@ -144,20 +151,36 @@ func (m *managerImpl) setMetrics() {
 }
 
 // Start starts the node shutdown manager and will start watching the node for shutdown events.
-func (m *managerImpl) Start(ctx context.Context) error {
-	stop, err := m.start(ctx)
+func (m *managerImpl) Start() error {
+	stop, err := m.start()
 	if err != nil {
 		return err
 	}
 	go func() {
 		for {
-			if stop != nil {
-				<-stop
+			select {
+			case <-m.ctx.Done():
+				return
+			default:
 			}
 
-			time.Sleep(dbusReconnectPeriod)
+			if stop != nil {
+				select {
+				case <-stop:
+				case <-m.ctx.Done():
+					return
+				}
+			}
+
+			t := time.NewTimer(dbusReconnectPeriod)
+			select {
+			case <-t.C:
+			case <-m.ctx.Done():
+				t.Stop()
+				return
+			}
 			m.logger.V(1).Info("Restarting watch for node shutdown events")
-			stop, err = m.start(ctx)
+			stop, err = m.start()
 			if err != nil {
 				m.logger.Error(err, "Unable to watch the node for shutdown events")
 			}
@@ -168,7 +191,7 @@ func (m *managerImpl) Start(ctx context.Context) error {
 	return nil
 }
 
-func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
+func (m *managerImpl) start() (chan struct{}, error) {
 	systemBus, err := systemDbus()
 	if err != nil {
 		return nil, err
@@ -248,6 +271,9 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 		// 3. When shutdown(false) event is received, this indicates a previous shutdown was cancelled. In this case, acquire the inhibit lock again.
 		for {
 			select {
+			case <-m.ctx.Done():
+				close(stop)
+				return
 			case isShuttingDown, ok := <-events:
 				if !ok {
 					m.logger.Error(err, "Ended to watching the node for shutdown events")
@@ -275,7 +301,10 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 
 				if isShuttingDown {
 					// Update node status and ready condition
-					go m.syncNodeStatus(ctx)
+					// Use the manager context (typically the Kubelet context) to ensure sync operations
+					// are cancelled when Kubelet is terminating while preserving structured logging.
+					nodeStatusCtx := klog.NewContext(m.ctx, m.logger)
+					go m.syncNodeStatus(nodeStatusCtx)
 
 					m.processShutdownEvent()
 				} else {

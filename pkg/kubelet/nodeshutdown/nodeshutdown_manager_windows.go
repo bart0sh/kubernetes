@@ -54,6 +54,7 @@ type managerImpl struct {
 	logger   klog.Logger
 	recorder record.EventRecorder
 	nodeRef  *v1.ObjectReference
+	ctx      context.Context
 
 	getPods        eviction.ActivePodsFunc
 	syncNodeStatus func(context.Context)
@@ -83,10 +84,16 @@ func NewManager(conf *Config) Manager {
 		return m
 	}
 
+	managerCtx := conf.Context
+	if managerCtx == nil {
+		managerCtx = context.Background()
+	}
+
 	manager := &managerImpl{
 		logger:         conf.Logger,
 		recorder:       conf.Recorder,
 		nodeRef:        conf.NodeRef,
+		ctx:            managerCtx,
 		getPods:        conf.GetPodsFunc,
 		syncNodeStatus: conf.SyncNodeStatusFunc,
 		podManager:     podManager,
@@ -136,7 +143,7 @@ func (m *managerImpl) setMetrics() {
 }
 
 // Start starts the node shutdown manager and will start watching the node for shutdown events.
-func (m *managerImpl) Start(_ context.Context) error {
+func (m *managerImpl) Start() error {
 	m.logger.V(1).Info("Shutdown manager get started")
 
 	_, err := m.start()
@@ -247,7 +254,11 @@ func (m *managerImpl) ProcessShutdownEvent() error {
 	m.nodeShuttingDownNow = true
 	m.nodeShuttingDownMutex.Unlock()
 
-	go m.syncNodeStatus(context.TODO())
+	// ProcessShutdownEvent is invoked by the Windows service handler without an upper-level context.
+	// Use the manager context (typically the Kubelet context) to ensure sync operations are
+	// cancelled when Kubelet is terminating while preserving structured logging.
+	nodeStatusCtx := klog.NewContext(m.ctx, m.logger)
+	go m.syncNodeStatus(nodeStatusCtx)
 
 	m.logger.V(1).Info("Shutdown manager processing preshutdown event")
 	activePods := m.getPods()

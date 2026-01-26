@@ -356,7 +356,7 @@ func createTestPodsStatusesAndEvents(num int) ([]*kubecontainer.Pod, []*kubecont
 }
 
 func TestRelistWithCache(t *testing.T) {
-	ctx := context.Background()
+	ctx := klog.NewContext(context.Background(), klog.Logger{})
 	runtimeMock := containertest.NewMockRuntime(t)
 
 	pleg := newTestGenericPLEGWithRuntimeMock(runtimeMock)
@@ -411,7 +411,7 @@ func TestRelistWithCache(t *testing.T) {
 }
 
 func TestRemoveCacheEntry(t *testing.T) {
-	ctx := context.Background()
+	ctx := klog.NewContext(context.Background(), klog.Logger{})
 	runtimeMock := containertest.NewMockRuntime(t)
 	pleg := newTestGenericPLEGWithRuntimeMock(runtimeMock)
 
@@ -457,7 +457,7 @@ func TestHealthy(t *testing.T) {
 }
 
 func TestRelistWithReinspection(t *testing.T) {
-	ctx := context.Background()
+	ctx := klog.NewContext(context.Background(), klog.Logger{})
 	runtimeMock := containertest.NewMockRuntime(t)
 
 	pleg := newTestGenericPLEGWithRuntimeMock(runtimeMock)
@@ -594,7 +594,7 @@ func TestRelistingWithSandboxes(t *testing.T) {
 }
 
 func TestRelistIPChange(t *testing.T) {
-	ctx := context.Background()
+	ctx := klog.NewContext(context.Background(), klog.Logger{})
 	testCases := []struct {
 		name   string
 		podID  string

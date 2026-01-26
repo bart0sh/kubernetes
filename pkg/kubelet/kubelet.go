@@ -887,7 +887,7 @@ func NewMainKubelet(ctx context.Context,
 		return nil, err
 	}
 	klet.containerGC = containerGC
-	klet.containerDeletor = newPodContainerDeletor(klet.containerRuntime, max(containerGCPolicy.MaxPerPodContainer, minDeadContainerInPod))
+	klet.containerDeletor = newPodContainerDeletor(klet.containerRuntime, max(containerGCPolicy.MaxPerPodContainer, minDeadContainerInPod), logger)
 
 	// setup imageManager
 	imageManager, err := images.NewImageGCManager(klet.containerRuntime, klet.StatsProvider, postImageGCHooks, kubeDeps.Recorder, nodeRef, imageGCPolicy, kubeDeps.TracerProvider)
@@ -980,7 +980,7 @@ func NewMainKubelet(ctx context.Context,
 	// NewInitializedVolumePluginMgr initializes some storageErrors on the Kubelet runtimeState (in csi_plugin.go init)
 	// which affects node ready status. This function must be called before Kubelet is initialized so that the Node
 	// ReadyState is accurate with the storage state.
-	klet.volumePluginMgr, err = NewInitializedVolumePluginMgr(klet, secretManager, configMapManager, tokenManager, clusterTrustBundleManager, kubeDeps.VolumePlugins, kubeDeps.DynamicPluginProber)
+	klet.volumePluginMgr, err = NewInitializedVolumePluginMgr(klet, logger, secretManager, configMapManager, tokenManager, clusterTrustBundleManager, kubeDeps.VolumePlugins, kubeDeps.DynamicPluginProber)
 	if err != nil {
 		return nil, err
 	}
@@ -1095,6 +1095,7 @@ func NewMainKubelet(ctx context.Context,
 
 	// setup node shutdown manager
 	shutdownManager := nodeshutdown.NewManager(&nodeshutdown.Config{
+		Context:                          ctx,
 		Logger:                           logger,
 		VolumeManager:                    klet.volumeManager,
 		Recorder:                         kubeDeps.Recorder,
@@ -2631,7 +2632,7 @@ func (kl *Kubelet) syncLoopIteration(ctx context.Context, configCh <-chan kubety
 
 		if e.Type == pleg.ContainerDied {
 			if containerID, ok := e.Data.(string); ok {
-				kl.cleanUpContainersInPod(e.ID, containerID)
+				kl.cleanUpContainersInPod(logger, e.ID, containerID)
 			}
 		}
 	case <-syncCh:
@@ -3050,7 +3051,7 @@ func (kl *Kubelet) HandlePodReconcile(ctx context.Context, pods []*v1.Pod) {
 		// can do better. If it's about preserving pod status info we can also do better.
 		if eviction.PodIsEvicted(pod.Status) {
 			if podStatus, err := kl.podCache.Get(pod.UID); err == nil {
-				kl.containerDeletor.deleteContainersInPod("", podStatus, true)
+				kl.containerDeletor.deleteContainersInPod(logger, "", podStatus, true)
 			}
 		}
 	}
@@ -3220,11 +3221,11 @@ func (kl *Kubelet) ListenAndServePodResources(ctx context.Context) {
 }
 
 // Delete the eligible dead container instances in a pod. Depending on the configuration, the latest dead containers may be kept around.
-func (kl *Kubelet) cleanUpContainersInPod(podID types.UID, exitedContainerID string) {
+func (kl *Kubelet) cleanUpContainersInPod(logger klog.Logger, podID types.UID, exitedContainerID string) {
 	if podStatus, err := kl.podCache.Get(podID); err == nil {
 		// When an evicted or deleted pod has already synced, all containers can be removed.
 		removeAll := kl.podWorkers.ShouldPodContentBeRemoved(podID)
-		kl.containerDeletor.deleteContainersInPod(exitedContainerID, podStatus, removeAll)
+		kl.containerDeletor.deleteContainersInPod(logger, exitedContainerID, podStatus, removeAll)
 	}
 }
 

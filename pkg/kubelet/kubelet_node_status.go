@@ -53,8 +53,8 @@ func (kl *Kubelet) registerWithAPIServer(ctx context.Context) {
 	if kl.registrationCompleted {
 		return
 	}
-	logger := klog.FromContext(ctx)
 
+	logger := klog.FromContext(ctx)
 	kl.nodeStartupLatencyTracker.RecordAttemptRegisterNode()
 
 	step := 100 * time.Millisecond
@@ -127,10 +127,10 @@ func (kl *Kubelet) tryRegisterWithAPIServer(ctx context.Context, node *v1.Node) 
 	// Edge case: the node was previously registered; reconcile
 	// the value of the controller-managed attach-detach
 	// annotation.
-	requiresUpdate := kl.reconcileCMADAnnotationWithExistingNode(logger, node, existingNode)
+	requiresUpdate := kl.reconcileCMADAnnotationWithExistingNode(ctx, node, existingNode)
 	requiresUpdate = kl.updateDefaultLabels(node, existingNode) || requiresUpdate
-	requiresUpdate = kl.reconcileExtendedResource(logger, node, existingNode) || requiresUpdate
-	requiresUpdate = kl.reconcileHugePageResource(logger, node, existingNode) || requiresUpdate
+	requiresUpdate = kl.reconcileExtendedResource(ctx, node, existingNode) || requiresUpdate
+	requiresUpdate = kl.reconcileHugePageResource(ctx, node, existingNode) || requiresUpdate
 	if requiresUpdate {
 		if _, _, err := nodeutil.PatchNodeStatus(kl.kubeClient.CoreV1(), types.NodeName(kl.nodeName), originalNode, existingNode); err != nil {
 			logger.Error(err, "Unable to reconcile node with API server,error updating node", "node", klog.KObj(node))
@@ -142,7 +142,8 @@ func (kl *Kubelet) tryRegisterWithAPIServer(ctx context.Context, node *v1.Node) 
 }
 
 // reconcileHugePageResource will update huge page capacity for each page size and remove huge page sizes no longer supported
-func (kl *Kubelet) reconcileHugePageResource(logger klog.Logger, initialNode, existingNode *v1.Node) bool {
+func (kl *Kubelet) reconcileHugePageResource(ctx context.Context, initialNode, existingNode *v1.Node) bool {
+	logger := klog.FromContext(ctx)
 	requiresUpdate := updateDefaultResources(initialNode, existingNode)
 	supportedHugePageResources := sets.Set[string]{}
 
@@ -189,7 +190,8 @@ func (kl *Kubelet) reconcileHugePageResource(logger klog.Logger, initialNode, ex
 }
 
 // Zeros out extended resource capacity during reconciliation.
-func (kl *Kubelet) reconcileExtendedResource(logger klog.Logger, initialNode, node *v1.Node) bool {
+func (kl *Kubelet) reconcileExtendedResource(ctx context.Context, initialNode, node *v1.Node) bool {
+	logger := klog.FromContext(ctx)
 	requiresUpdate := updateDefaultResources(initialNode, node)
 	// Check with the device manager to see if node has been recreated, in which case extended resources should be zeroed until they are available
 	if kl.containerManager.ShouldResetExtendedResourceCapacity() {
@@ -271,7 +273,8 @@ func (kl *Kubelet) updateDefaultLabels(initialNode, existingNode *v1.Node) bool 
 // reconcileCMADAnnotationWithExistingNode reconciles the controller-managed
 // attach-detach annotation on a new node and the existing node, returning
 // whether the existing node must be updated.
-func (kl *Kubelet) reconcileCMADAnnotationWithExistingNode(logger klog.Logger, node, existingNode *v1.Node) bool {
+func (kl *Kubelet) reconcileCMADAnnotationWithExistingNode(ctx context.Context, node, existingNode *v1.Node) bool {
+	logger := klog.FromContext(ctx)
 	var (
 		existingCMAAnnotation    = existingNode.Annotations[volutil.ControllerManagedAttachAnnotation]
 		newCMAAnnotation, newSet = node.Annotations[volutil.ControllerManagedAttachAnnotation]
@@ -436,7 +439,7 @@ func (kl *Kubelet) fastNodeStatusUpdate(ctx context.Context, timeout bool) (comp
 
 		// The reversed kl.syncNodeStatusMux.Unlock/Lock() below to allow kl.syncNodeStatus() execution.
 		kl.syncNodeStatusMux.Unlock()
-		kl.syncNodeStatus(ctx)
+		kl.syncNodeStatus(klog.NewContext(context.Background(), logger))
 		// This lock action is unnecessary if we add a flag to check in the defer before unlocking it,
 		// but having it here makes the logic a bit easier to read.
 		kl.syncNodeStatusMux.Lock()
@@ -635,7 +638,8 @@ func (kl *Kubelet) markVolumesFromNode(node *v1.Node) {
 
 // recordNodeStatusEvent records an event of the given type with the given
 // message for the node.
-func (kl *Kubelet) recordNodeStatusEvent(logger klog.Logger, eventType, event string) {
+func (kl *Kubelet) recordNodeStatusEvent(ctx context.Context, eventType, event string) {
+	logger := klog.FromContext(ctx)
 	logger.V(2).Info("Recording event message for node", "node", klog.KRef("", string(kl.nodeName)), "event", event)
 	kl.recorder.Eventf(kl.nodeRef, eventType, event, "Node %s status is now: %s", kl.nodeName, event)
 }
@@ -647,14 +651,13 @@ func (kl *Kubelet) recordEvent(eventType, event, message string) {
 
 // record if node schedulable change.
 func (kl *Kubelet) recordNodeSchedulableEvent(ctx context.Context, node *v1.Node) error {
-	logger := klog.FromContext(ctx)
 	kl.lastNodeUnschedulableLock.Lock()
 	defer kl.lastNodeUnschedulableLock.Unlock()
 	if kl.lastNodeUnschedulable != node.Spec.Unschedulable {
 		if node.Spec.Unschedulable {
-			kl.recordNodeStatusEvent(logger, v1.EventTypeNormal, events.NodeNotSchedulable)
+			kl.recordNodeStatusEvent(ctx, v1.EventTypeNormal, events.NodeNotSchedulable)
 		} else {
-			kl.recordNodeStatusEvent(logger, v1.EventTypeNormal, events.NodeSchedulable)
+			kl.recordNodeStatusEvent(ctx, v1.EventTypeNormal, events.NodeSchedulable)
 		}
 		kl.lastNodeUnschedulable = node.Spec.Unschedulable
 	}

@@ -26,6 +26,7 @@ import (
 )
 
 func TestGetContainersToDeleteInPodWithFilter(t *testing.T) {
+	logger := klog.Background()
 	pod := kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
 			{
@@ -80,7 +81,7 @@ func TestGetContainersToDeleteInPodWithFilter(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		candidates := getContainersToDeleteInPod("4", &pod, test.containersToKeep, klog.Background())
+		candidates := getContainersToDeleteInPod("4", &pod, test.containersToKeep, logger)
 		if !reflect.DeepEqual(candidates, test.expectedContainersToDelete) {
 			t.Errorf("expected %v got %v", test.expectedContainersToDelete, candidates)
 		}
@@ -88,6 +89,7 @@ func TestGetContainersToDeleteInPodWithFilter(t *testing.T) {
 }
 
 func TestGetContainersToDeleteInPod(t *testing.T) {
+	logger := klog.Background()
 	pod := kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
 			{
@@ -142,7 +144,7 @@ func TestGetContainersToDeleteInPod(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		candidates := getContainersToDeleteInPod("", &pod, test.containersToKeep, klog.Background())
+		candidates := getContainersToDeleteInPod("", &pod, test.containersToKeep, logger)
 		if !reflect.DeepEqual(candidates, test.expectedContainersToDelete) {
 			t.Errorf("expected %v got %v", test.expectedContainersToDelete, candidates)
 		}
@@ -150,6 +152,7 @@ func TestGetContainersToDeleteInPod(t *testing.T) {
 }
 
 func TestGetContainersToDeleteInPodWithNoMatch(t *testing.T) {
+	logger := klog.Background()
 	pod := kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
 			{
@@ -196,7 +199,7 @@ func TestGetContainersToDeleteInPodWithNoMatch(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		candidates := getContainersToDeleteInPod(test.filterID, &pod, len(pod.ContainerStatuses), klog.Background())
+		candidates := getContainersToDeleteInPod(test.filterID, &pod, len(pod.ContainerStatuses), logger)
 		if !reflect.DeepEqual(candidates, test.expectedContainersToDelete) {
 			t.Errorf("expected %v got %v", test.expectedContainersToDelete, candidates)
 		}

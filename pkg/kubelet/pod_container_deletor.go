@@ -44,10 +44,8 @@ func (a containerStatusbyCreatedList) Less(i, j int) bool {
 	return a[i].CreatedAt.After(a[j].CreatedAt)
 }
 
-func newPodContainerDeletor(runtime kubecontainer.Runtime, containersToKeep int, logger klog.Logger) *podContainerDeletor {
+func newPodContainerDeletor(logger klog.Logger, runtime kubecontainer.Runtime, containersToKeep int) *podContainerDeletor {
 	if logger.GetSink() == nil {
-		// This deletor runs a long-lived background worker which logs container deletion
-		// errors. Ensure the logger has a sink even if the caller passes a zero logger.
 		logger = klog.Background()
 	}
 	buffer := make(chan kubecontainer.ContainerID, containerDeletorBufferLimit)

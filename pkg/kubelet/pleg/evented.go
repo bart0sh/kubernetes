@@ -114,18 +114,19 @@ func (e *EventedPLEG) Watch() chan *PodLifecycleEvent {
 }
 
 // Relist relists all containers using GenericPLEG
-func (e *EventedPLEG) Relist() {
-	e.genericPleg.Relist()
+func (e *EventedPLEG) Relist(ctx context.Context) {
+	e.genericPleg.Relist(ctx)
 }
 
 // Start starts the Evented PLEG
-func (e *EventedPLEG) Start() {
+func (e *EventedPLEG) Start(ctx context.Context) {
 	e.runningMu.Lock()
 	defer e.runningMu.Unlock()
 	if isEventedPLEGInUse() {
 		return
 	}
 	setEventedPLEGUsage(true)
+	e.genericPleg.Start(ctx)
 	e.stopCh = make(chan struct{})
 	e.stopCacheUpdateCh = make(chan struct{})
 	go wait.Until(e.watchEventsChannel, 0, e.stopCh)
@@ -191,7 +192,7 @@ func (e *EventedPLEG) watchEventsChannel() {
 					e.Stop()
 					e.genericPleg.Stop()       // Stop the existing Generic PLEG which runs with longer relisting period when Evented PLEG is in use.
 					e.Update(e.relistDuration) // Update the relisting period to the default value for the Generic PLEG.
-					e.genericPleg.Start()
+					e.genericPleg.Start(context.Background())
 					break
 				}
 			}
@@ -202,7 +203,7 @@ func (e *EventedPLEG) watchEventsChannel() {
 			if err != nil {
 				metrics.EventedPLEGConnErr.Inc()
 				numAttempts++
-				e.Relist() // Force a relist to get the latest container and pods running metric.
+				e.Relist(context.Background()) // Force a relist to get the latest container and pods running metric.
 				e.logger.V(4).Info("Evented PLEG: Failed to get container events, retrying: ", "err", err)
 			}
 		}

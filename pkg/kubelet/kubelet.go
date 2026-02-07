@@ -1884,11 +1884,11 @@ func (kl *Kubelet) Run(ctx context.Context, updates <-chan kubetypes.PodUpdate) 
 	}
 
 	// Start the pod lifecycle event generator.
-	kl.pleg.Start()
+	kl.pleg.Start(ctx)
 
 	// Start eventedPLEG only if EventedPLEG feature gate is enabled.
 	if utilfeature.DefaultFeatureGate.Enabled(features.EventedPLEG) {
-		kl.eventedPleg.Start()
+		kl.eventedPleg.Start(ctx)
 	}
 
 	if kl.healthChecker != nil {

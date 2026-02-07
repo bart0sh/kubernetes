@@ -68,6 +68,8 @@ type GenericPLEG struct {
 	podsToReinspect map[types.UID]*kubecontainer.Pod
 	// Stop the Generic PLEG by closing the channel.
 	stopCh chan struct{}
+	// ctx is used for cancellation-aware runtime calls in Relist.
+	ctx context.Context
 	// Locks the relisting of the Generic PLEG
 	relistLock sync.Mutex
 	// Indicates if the Generic PLEG is running or not
@@ -152,13 +154,14 @@ func (g *GenericPLEG) Watch() chan *PodLifecycleEvent {
 }
 
 // Start spawns a goroutine to relist periodically.
-func (g *GenericPLEG) Start() {
+func (g *GenericPLEG) Start(ctx context.Context) {
 	g.runningMu.Lock()
 	defer g.runningMu.Unlock()
 	if !g.isRunning {
 		g.isRunning = true
+		g.ctx = ctx
 		g.stopCh = make(chan struct{})
-		go wait.Until(g.Relist, g.relistDuration.RelistPeriod, g.stopCh)
+		go wait.Until(func() { g.Relist(ctx) }, g.relistDuration.RelistPeriod, g.stopCh)
 	}
 }
 
@@ -231,12 +234,16 @@ func (g *GenericPLEG) updateRelistTime(timestamp time.Time) {
 
 // Relist queries the container runtime for list of pods/containers, compare
 // with the internal pods/containers, and generates events accordingly.
-func (g *GenericPLEG) Relist() {
+func (g *GenericPLEG) Relist(ctx context.Context) {
 	g.relistLock.Lock()
 	defer g.relistLock.Unlock()
-
-	ctx := klog.NewContext(context.Background(), g.logger)
-	logger := klog.FromContext(ctx)
+	if ctx == nil {
+		ctx = g.ctx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	logger := g.logger
 
 	logger.V(5).Info("GenericPLEG: Relisting")
 

@@ -34,8 +34,14 @@ const (
 type containerStatusbyCreatedList []*kubecontainer.Status
 
 type podContainerDeletor struct {
-	worker           chan<- kubecontainer.ContainerID
+	worker           chan<- containerDeleteRequest
 	containersToKeep int
+}
+
+type containerDeleteRequest struct {
+	logger klog.Logger
+	ctx    context.Context
+	id     kubecontainer.ContainerID
 }
 
 func (a containerStatusbyCreatedList) Len() int      { return len(a) }
@@ -48,12 +54,19 @@ func newPodContainerDeletor(logger klog.Logger, runtime kubecontainer.Runtime, c
 	if logger.GetSink() == nil {
 		logger = klog.Background()
 	}
-	buffer := make(chan kubecontainer.ContainerID, containerDeletorBufferLimit)
+	buffer := make(chan containerDeleteRequest, containerDeletorBufferLimit)
 	go wait.Until(func() {
 		for {
-			id := <-buffer
-			if err := runtime.DeleteContainer(context.Background(), id); err != nil {
-				logger.Info("DeleteContainer returned error", "containerID", id, "err", err)
+			req := <-buffer
+			logger := req.logger
+			if logger.GetSink() == nil {
+				logger = klog.Background()
+			}
+			if req.ctx == nil {
+				req.ctx = context.Background()
+			}
+			if err := runtime.DeleteContainer(req.ctx, req.id); err != nil {
+				logger.Info("DeleteContainer returned error", "containerID", req.id, "err", err)
 			}
 		}
 	}, 0, wait.NeverStop)
@@ -104,6 +117,7 @@ func getContainersToDeleteInPod(filterContainerID string, podStatus *kubecontain
 
 // deleteContainersInPod issues container deletion requests for containers selected by getContainersToDeleteInPod.
 func (p *podContainerDeletor) deleteContainersInPod(logger klog.Logger, filterContainerID string, podStatus *kubecontainer.PodStatus, removeAll bool) {
+	ctx := klog.NewContext(context.Background(), logger)
 	containersToKeep := p.containersToKeep
 	if removeAll {
 		containersToKeep = 0
@@ -112,7 +126,7 @@ func (p *podContainerDeletor) deleteContainersInPod(logger klog.Logger, filterCo
 
 	for _, candidate := range getContainersToDeleteInPod(filterContainerID, podStatus, containersToKeep, logger) {
 		select {
-		case p.worker <- candidate.ID:
+		case p.worker <- containerDeleteRequest{logger: logger, ctx: ctx, id: candidate.ID}:
 		default:
 			logger.Info("Failed to issue the request to remove container", "containerID", candidate.ID)
 		}

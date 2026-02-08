@@ -2453,7 +2453,7 @@ func (kl *Kubelet) getPodsToSync() []*v1.Pod {
 //
 // deletePod returns an error if not all sources are ready or the pod is not
 // found in the runtime cache.
-func (kl *Kubelet) deletePod(logger klog.Logger, pod *v1.Pod) error {
+func (kl *Kubelet) deletePod(ctx context.Context, logger klog.Logger, pod *v1.Pod) error {
 	if pod == nil {
 		return fmt.Errorf("deletePod does not allow nil pod")
 	}
@@ -2464,6 +2464,7 @@ func (kl *Kubelet) deletePod(logger klog.Logger, pod *v1.Pod) error {
 	}
 	logger.V(3).Info("Pod has been deleted and must be killed", "pod", klog.KObj(pod), "podUID", pod.UID)
 	kl.podWorkers.UpdatePod(UpdatePodOptions{
+		Context:    ctx,
 		Pod:        pod,
 		UpdateType: kubetypes.SyncPodKill,
 	})
@@ -2737,6 +2738,7 @@ func (kl *Kubelet) HandlePodAdditions(ctx context.Context, pods []*v1.Pod) {
 				continue
 			}
 			kl.podWorkers.UpdatePod(UpdatePodOptions{
+				Context:    ctx,
 				Pod:        pod,
 				MirrorPod:  mirrorPod,
 				UpdateType: kubetypes.SyncPodUpdate,
@@ -2777,6 +2779,7 @@ func (kl *Kubelet) HandlePodAdditions(ctx context.Context, pods []*v1.Pod) {
 			}
 		}
 		kl.podWorkers.UpdatePod(UpdatePodOptions{
+			Context:    ctx,
 			Pod:        pod,
 			MirrorPod:  mirrorPod,
 			UpdateType: kubetypes.SyncPodCreate,
@@ -2849,6 +2852,7 @@ func (kl *Kubelet) HandlePodUpdates(ctx context.Context, pods []*v1.Pod) {
 		}
 
 		kl.podWorkers.UpdatePod(UpdatePodOptions{
+			Context:    ctx,
 			Pod:        pod,
 			MirrorPod:  mirrorPod,
 			UpdateType: kubetypes.SyncPodUpdate,
@@ -2960,6 +2964,7 @@ func (kl *Kubelet) HandlePodRemoves(ctx context.Context, pods []*v1.Pod) {
 				continue
 			}
 			kl.podWorkers.UpdatePod(UpdatePodOptions{
+				Context:    ctx,
 				Pod:        pod,
 				MirrorPod:  mirrorPod,
 				UpdateType: kubetypes.SyncPodUpdate,
@@ -2970,7 +2975,7 @@ func (kl *Kubelet) HandlePodRemoves(ctx context.Context, pods []*v1.Pod) {
 
 		// Deletion is allowed to fail because the periodic cleanup routine
 		// will trigger deletion again.
-		if err := kl.deletePod(logger, pod); err != nil {
+		if err := kl.deletePod(ctx, logger, pod); err != nil {
 			logger.V(2).Info("Failed to delete pod", "pod", klog.KObj(pod), "err", err)
 		}
 	}
@@ -3036,6 +3041,7 @@ func (kl *Kubelet) HandlePodReconcile(ctx context.Context, pods []*v1.Pod) {
 		// needsReconcile in kubelet/config, here, and in status_manager.
 		if status.NeedToReconcilePodReadiness(pod) {
 			kl.podWorkers.UpdatePod(UpdatePodOptions{
+				Context:    ctx,
 				Pod:        pod,
 				MirrorPod:  mirrorPod,
 				UpdateType: kubetypes.SyncPodSync,
@@ -3081,6 +3087,7 @@ func (kl *Kubelet) HandlePodSyncs(ctx context.Context, pods []*v1.Pod) {
 			continue
 		}
 		kl.podWorkers.UpdatePod(UpdatePodOptions{
+			Context:    ctx,
 			Pod:        pod,
 			MirrorPod:  mirrorPod,
 			UpdateType: kubetypes.SyncPodSync,

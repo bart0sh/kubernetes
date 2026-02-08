@@ -460,8 +460,8 @@ func TestFeatureEnabled(t *testing.T) {
 }
 
 func TestRestart(t *testing.T) {
-	logger, _ := ktesting.NewTestContext(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	logger, tCtx := ktesting.NewTestContext(t)
+	ctx, cancel := context.WithCancel(tCtx)
 	defer cancel()
 	systemDbusTmp := systemDbus
 	defer func() {
@@ -541,9 +541,9 @@ func TestManager_ContextCancellationStopsSyncNodeStatus(t *testing.T) {
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.GracefulNodeShutdown, true)
 
-	logger, _ := ktesting.NewTestContext(t)
+	logger, tCtx := ktesting.NewTestContext(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(tCtx)
 	defer cancel()
 
 	shutdownCh := make(chan bool, 1)
@@ -786,7 +786,8 @@ func Test_processShutdownEvent_VolumeUnmountCancelledByManagerContext(t *testing
 		syncNodeStatus = func(context.Context) {}
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	_, tCtx := ktesting.NewTestContext(t)
+	ctx, cancel := context.WithCancel(tCtx)
 
 	fakeVolumeManager := volumemanager.NewFakeVolumeManager(
 		[]v1.UniqueVolumeName{},

@@ -192,18 +192,18 @@ func (e *EventedPLEG) watchEventsChannel() {
 					e.Stop()
 					e.genericPleg.Stop()       // Stop the existing Generic PLEG which runs with longer relisting period when Evented PLEG is in use.
 					e.Update(e.relistDuration) // Update the relisting period to the default value for the Generic PLEG.
-					e.genericPleg.Start(context.Background())
+					e.genericPleg.Start(e.genericPlegCtx())
 					break
 				}
 			}
 
-			err := e.runtimeService.GetContainerEvents(context.Background(), containerEventsResponseCh, func(runtimeapi.RuntimeService_GetContainerEventsClient) {
+			err := e.runtimeService.GetContainerEvents(e.genericPlegCtx(), containerEventsResponseCh, func(runtimeapi.RuntimeService_GetContainerEventsClient) {
 				metrics.EventedPLEGConn.Inc()
 			})
 			if err != nil {
 				metrics.EventedPLEGConnErr.Inc()
 				numAttempts++
-				e.Relist(context.Background()) // Force a relist to get the latest container and pods running metric.
+				e.Relist(e.genericPlegCtx()) // Force a relist to get the latest container and pods running metric.
 				e.logger.V(4).Info("Evented PLEG: Failed to get container events, retrying: ", "err", err)
 			}
 		}
@@ -212,6 +212,15 @@ func (e *EventedPLEG) watchEventsChannel() {
 	if isEventedPLEGInUse() {
 		e.processCRIEvents(containerEventsResponseCh)
 	}
+}
+
+func (e *EventedPLEG) genericPlegCtx() context.Context {
+	if genericPLEG, ok := e.genericPleg.(*GenericPLEG); ok {
+		if genericPLEG.ctx != nil {
+			return genericPLEG.ctx
+		}
+	}
+	return context.TODO()
 }
 
 func (e *EventedPLEG) processCRIEvents(containerEventsResponseCh chan *runtimeapi.ContainerEventResponse) {

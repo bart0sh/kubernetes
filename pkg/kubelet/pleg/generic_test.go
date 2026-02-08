@@ -17,7 +17,6 @@ limitations under the License.
 package pleg
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -41,8 +40,6 @@ import (
 	"k8s.io/utils/clock"
 	testingclock "k8s.io/utils/clock/testing"
 )
-
-var ctx = context.Background()
 
 const (
 	testContainerRuntimeType = "fooRuntime"
@@ -114,6 +111,7 @@ func verifyEvents(t *testing.T, expected, actual []*PodLifecycleEvent) {
 }
 
 func TestRelisting(t *testing.T) {
+	_, ctx := ktesting.NewTestContext(t)
 	testPleg := newTestGenericPLEG()
 	pleg, runtime := testPleg.pleg, testPleg.runtime
 	ch := pleg.Watch()
@@ -181,6 +179,7 @@ func TestRelisting(t *testing.T) {
 
 // TestEventChannelFull test when channel is full, the events will be discard.
 func TestEventChannelFull(t *testing.T) {
+	_, ctx := ktesting.NewTestContext(t)
 	testPleg := newTestGenericPLEGWithChannelSize(4)
 	pleg, runtime := testPleg.pleg, testPleg.runtime
 	ch := pleg.Watch()
@@ -251,6 +250,7 @@ func TestDetectingContainerDeaths(t *testing.T) {
 }
 
 func testReportMissingContainers(t *testing.T, numRelists int) {
+	_, ctx := ktesting.NewTestContext(t)
 	testPleg := newTestGenericPLEG()
 	pleg, runtime := testPleg.pleg, testPleg.runtime
 	ch := pleg.Watch()
@@ -292,6 +292,7 @@ func testReportMissingContainers(t *testing.T, numRelists int) {
 }
 
 func testReportMissingPods(t *testing.T, numRelists int) {
+	_, ctx := ktesting.NewTestContext(t)
 	testPleg := newTestGenericPLEG()
 	pleg, runtime := testPleg.pleg, testPleg.runtime
 	ch := pleg.Watch()
@@ -415,7 +416,8 @@ func TestRelistWithCache(t *testing.T) {
 }
 
 func TestRemoveCacheEntry(t *testing.T) {
-	ctx := klog.NewContext(context.Background(), klog.Logger{})
+	tCtx := ktesting.Init(t)
+	ctx := klog.NewContext(tCtx, klog.Logger{})
 	runtimeMock := containertest.NewMockRuntime(t)
 	pleg := newTestGenericPLEGWithRuntimeMock(runtimeMock)
 
@@ -434,6 +436,7 @@ func TestRemoveCacheEntry(t *testing.T) {
 }
 
 func TestHealthy(t *testing.T) {
+	_, ctx := ktesting.NewTestContext(t)
 	testPleg := newTestGenericPLEG()
 
 	// pleg should initially be unhealthy
@@ -461,7 +464,8 @@ func TestHealthy(t *testing.T) {
 }
 
 func TestRelistWithReinspection(t *testing.T) {
-	ctx := klog.NewContext(context.Background(), klog.Logger{})
+	tCtx := ktesting.Init(t)
+	ctx := klog.NewContext(tCtx, klog.Logger{})
 	runtimeMock := containertest.NewMockRuntime(t)
 
 	pleg := newTestGenericPLEGWithRuntimeMock(runtimeMock)
@@ -533,6 +537,7 @@ func TestRelistWithReinspection(t *testing.T) {
 
 // Test detecting sandbox state changes.
 func TestRelistingWithSandboxes(t *testing.T) {
+	_, ctx := ktesting.NewTestContext(t)
 	testPleg := newTestGenericPLEG()
 	pleg, runtime := testPleg.pleg, testPleg.runtime
 	ch := pleg.Watch()
@@ -598,7 +603,8 @@ func TestRelistingWithSandboxes(t *testing.T) {
 }
 
 func TestRelistIPChange(t *testing.T) {
-	ctx := klog.NewContext(context.Background(), klog.Logger{})
+	tCtx := ktesting.Init(t)
+	ctx := klog.NewContext(tCtx, klog.Logger{})
 	testCases := []struct {
 		name   string
 		podID  string
@@ -674,6 +680,7 @@ func TestRelistIPChange(t *testing.T) {
 }
 
 func TestRunningPodAndContainerCount(t *testing.T) {
+	_, ctx := ktesting.NewTestContext(t)
 	metrics.Register()
 	testPleg := newTestGenericPLEG()
 	pleg, runtime := testPleg.pleg, testPleg.runtime
@@ -744,6 +751,7 @@ kubelet_running_pods 2
 }
 
 func TestWatchConditions(t *testing.T) {
+	_, ctx := ktesting.NewTestContext(t)
 	pods := []*kubecontainer.Pod{{
 		Name: "running-pod",
 		ID:   "running",

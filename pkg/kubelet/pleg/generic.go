@@ -241,7 +241,7 @@ func (g *GenericPLEG) Relist(ctx context.Context) {
 		ctx = g.ctx
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = context.TODO()
 	}
 	logger := g.logger
 

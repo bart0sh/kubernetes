@@ -656,8 +656,10 @@ func TestDispatchWorkOfCompletedPod(t *testing.T) {
 			},
 		},
 	}
+	ctx := context.Background()
 	for _, pod := range pods {
 		kubelet.podWorkers.UpdatePod(UpdatePodOptions{
+			Context:    ctx,
 			Pod:        pod,
 			UpdateType: kubetypes.SyncPodSync,
 			StartTime:  time.Now(),
@@ -714,8 +716,10 @@ func TestDispatchWorkOfActivePod(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
 	for _, pod := range pods {
 		kubelet.podWorkers.UpdatePod(UpdatePodOptions{
+			Context:    ctx,
 			Pod:        pod,
 			UpdateType: kubetypes.SyncPodSync,
 			StartTime:  time.Now(),

@@ -48,12 +48,6 @@ type Manager interface {
 
 // Config represents Manager configuration
 type Config struct {
-	// Context controls the lifetime of background operations started by the
-	// node shutdown manager. It should typically be the Kubelet context so that
-	// shutdown-related goroutines are stopped when Kubelet is terminating.
-	//
-	// If nil, a background context is used.
-	Context                          context.Context
 	Logger                           klog.Logger
 	VolumeManager                    volumemanager.VolumeManager
 	Recorder                         record.EventRecorder
@@ -77,7 +71,7 @@ func (managerStub) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmit
 }
 
 // Start is a no-op always returning nil for non linux platforms.
-func (managerStub) Start(context.Context) error {
+func (managerStub) Start(ctx context.Context) error {
 	return nil
 }
 
@@ -97,7 +91,6 @@ const (
 
 // podManager is responsible for killing active pods by priority.
 type podManager struct {
-	ctx                              context.Context
 	logger                           klog.Logger
 	shutdownGracePeriodByPodPriority []kubeletconfig.ShutdownGracePeriodByPodPriority
 	clock                            clock.Clock
@@ -106,11 +99,6 @@ type podManager struct {
 }
 
 func newPodManager(conf *Config) *podManager {
-	ctx := conf.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	shutdownGracePeriodByPodPriority := conf.ShutdownGracePeriodByPodPriority
 
 	// Migration from the original configuration
@@ -129,7 +117,6 @@ func newPodManager(conf *Config) *podManager {
 	}
 
 	return &podManager{
-		ctx:                              ctx,
 		logger:                           conf.Logger,
 		shutdownGracePeriodByPodPriority: shutdownGracePeriodByPodPriority,
 		clock:                            conf.Clock,
@@ -139,7 +126,11 @@ func newPodManager(conf *Config) *podManager {
 }
 
 // killPods terminates pods by priority.
-func (m *podManager) killPods(activePods []*v1.Pod) error {
+func (m *podManager) killPods(ctx context.Context, activePods []*v1.Pod) error {
+	if ctx == nil {
+		return fmt.Errorf("pod manager requires a non-nil context")
+	}
+
 	groups := groupByPriority(m.shutdownGracePeriodByPodPriority, activePods)
 	for _, group := range groups {
 		// If there are no pods in a particular range,
@@ -189,9 +180,9 @@ func (m *podManager) killPods(activePods []*v1.Pod) error {
 		// to terminate before proceeding to the next group.
 		var groupTerminationWaitDuration = time.Duration(group.ShutdownGracePeriodSeconds) * time.Second
 		var (
-			doneCh         = make(chan struct{})
-			timer          = m.clock.NewTimer(groupTerminationWaitDuration)
-			ctx, ctxCancel = context.WithTimeout(m.ctx, groupTerminationWaitDuration)
+			doneCh              = make(chan struct{})
+			timer               = m.clock.NewTimer(groupTerminationWaitDuration)
+			groupCtx, ctxCancel = context.WithTimeout(ctx, groupTerminationWaitDuration)
 		)
 		go func() {
 			defer close(doneCh)
@@ -201,7 +192,7 @@ func (m *podManager) killPods(activePods []*v1.Pod) error {
 			// let's wait until all the volumes are unmounted from all the pods before
 			// continuing to the next group. This is done so that the CSI Driver (assuming
 			// that it's part of the highest group) has a chance to perform unmounts.
-			if err := m.volumeManager.WaitForAllPodsUnmount(ctx, group.Pods); err != nil {
+			if err := m.volumeManager.WaitForAllPodsUnmount(groupCtx, group.Pods); err != nil {
 				var podIdentifiers []string
 				for _, pod := range group.Pods {
 					podIdentifiers = append(podIdentifiers, fmt.Sprintf("%s/%s", pod.Namespace, pod.Name))

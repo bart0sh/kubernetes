@@ -146,7 +146,7 @@ func (m *managerImpl) setMetrics() {
 // Start starts the node shutdown manager and will start watching the node for shutdown events.
 func (m *managerImpl) Start(ctx context.Context) error {
 	if ctx == nil {
-		ctx = context.Background()
+		return fmt.Errorf("node shutdown manager requires a non-nil context")
 	}
 
 	stop, err := m.start(ctx)

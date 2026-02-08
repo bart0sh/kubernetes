@@ -138,7 +138,7 @@ func (m *managerImpl) setMetrics() {
 // Start starts the node shutdown manager and will start watching the node for shutdown events.
 func (m *managerImpl) Start(ctx context.Context) error {
 	if ctx == nil {
-		ctx = context.Background()
+		return fmt.Errorf("node shutdown manager requires a non-nil context")
 	}
 
 	m.logger.V(1).Info("Shutdown manager get started")
@@ -251,11 +251,7 @@ func (m *managerImpl) ProcessShutdownEvent() error {
 	m.nodeShuttingDownNow = true
 	m.nodeShuttingDownMutex.Unlock()
 
-	// ProcessShutdownEvent is invoked by the Windows service handler without an upper-level context.
-	// Use a background context to preserve structured logging.
-	// Kubelet shutdown is driven separately via server.RequestShutdown().
-	nodeStatusCtx := klog.NewContext(context.Background(), m.logger)
-	go m.syncNodeStatus(nodeStatusCtx)
+	go m.syncNodeStatus(klog.NewContext(context.TODO(), m.logger))
 
 	m.logger.V(1).Info("Shutdown manager processing preshutdown event")
 	activePods := m.getPods()

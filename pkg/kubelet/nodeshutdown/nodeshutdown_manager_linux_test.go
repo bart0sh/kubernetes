@@ -351,7 +351,8 @@ func TestManager(t *testing.T) {
 				StateDirectory:                  os.TempDir(),
 			})
 
-			err := manager.Start(context.Background())
+			_, tCtx := ktesting.NewTestContext(t)
+			err := manager.Start(tCtx)
 			lock.Unlock()
 
 			if tc.expectedError != nil {
@@ -621,7 +622,8 @@ func Test_managerImpl_processShutdownEvent(t *testing.T) {
 					clock:                            tt.fields.clock,
 				},
 			}
-			if err := m.processShutdownEvent(context.Background()); (err != nil) != tt.wantErr {
+			_, tCtx := ktesting.NewTestContext(t)
+			if err := m.processShutdownEvent(tCtx); (err != nil) != tt.wantErr {
 				t.Errorf("managerImpl.processShutdownEvent() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -684,7 +686,8 @@ func Test_processShutdownEvent_VolumeUnmountTimeout(t *testing.T) {
 	}
 
 	start := fakeclock.Now()
-	err := m.processShutdownEvent(context.Background())
+	_, tCtx := ktesting.NewTestContext(t)
+	err := m.processShutdownEvent(tCtx)
 	end := fakeclock.Now()
 
 	require.NoError(t, err, "managerImpl.processShutdownEvent() should not return an error")

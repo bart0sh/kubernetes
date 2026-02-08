@@ -439,7 +439,7 @@ func (kl *Kubelet) fastNodeStatusUpdate(ctx context.Context, timeout bool) (comp
 
 		// The reversed kl.syncNodeStatusMux.Unlock/Lock() below to allow kl.syncNodeStatus() execution.
 		kl.syncNodeStatusMux.Unlock()
-		kl.syncNodeStatus(klog.NewContext(context.Background(), logger))
+		kl.syncNodeStatus(klog.NewContext(ctx, logger))
 		// This lock action is unnecessary if we add a flag to check in the defer before unlocking it,
 		// but having it here makes the logic a bit easier to read.
 		kl.syncNodeStatusMux.Lock()

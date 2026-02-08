@@ -351,7 +351,7 @@ func TestManager(t *testing.T) {
 				StateDirectory:                  os.TempDir(),
 			})
 
-			err := manager.Start()
+			err := manager.Start(context.Background())
 			lock.Unlock()
 
 			if tc.expectedError != nil {
@@ -501,7 +501,6 @@ func TestRestart(t *testing.T) {
 	fakeVolumeManager := volumemanager.NewFakeVolumeManager([]v1.UniqueVolumeName{}, 0, nil, false)
 	nodeRef := &v1.ObjectReference{Kind: "Node", Name: "test", UID: types.UID("test"), Namespace: ""}
 	manager := NewManager(&Config{
-		Context:                         ctx,
 		Logger:                          logger,
 		VolumeManager:                   fakeVolumeManager,
 		Recorder:                        fakeRecorder,
@@ -514,7 +513,7 @@ func TestRestart(t *testing.T) {
 		StateDirectory:                  os.TempDir(),
 	})
 
-	err := manager.Start()
+	err := manager.Start(ctx)
 	lock.Unlock()
 
 	if err != nil {
@@ -563,7 +562,6 @@ func TestManager_ContextCancellationStopsSyncNodeStatus(t *testing.T) {
 	nodeRef := &v1.ObjectReference{Kind: "Node", Name: "test", UID: types.UID("test"), Namespace: ""}
 
 	manager := NewManager(&Config{
-		Context:       ctx,
 		Logger:        logger,
 		VolumeManager: fakeVolumeManager,
 		Recorder:      fakeRecorder,
@@ -582,7 +580,7 @@ func TestManager_ContextCancellationStopsSyncNodeStatus(t *testing.T) {
 		StateDirectory:                  os.TempDir(),
 	})
 
-	err := manager.Start()
+	err := manager.Start(ctx)
 	lock.Unlock()
 	require.NoError(t, err)
 
@@ -684,7 +682,6 @@ func Test_managerImpl_processShutdownEvent(t *testing.T) {
 				logger:                logger,
 				recorder:              tt.fields.recorder,
 				nodeRef:               tt.fields.nodeRef,
-				ctx:                   context.Background(),
 				getPods:               tt.fields.getPods,
 				syncNodeStatus:        tt.fields.syncNodeStatus,
 				dbusCon:               tt.fields.dbusCon,
@@ -692,7 +689,6 @@ func Test_managerImpl_processShutdownEvent(t *testing.T) {
 				nodeShuttingDownMutex: sync.Mutex{},
 				nodeShuttingDownNow:   tt.fields.nodeShuttingDownNow,
 				podManager: &podManager{
-					ctx:                              context.Background(),
 					logger:                           logger,
 					volumeManager:                    tt.fields.volumeManager,
 					shutdownGracePeriodByPodPriority: tt.fields.shutdownGracePeriodByPodPriority,
@@ -700,7 +696,7 @@ func Test_managerImpl_processShutdownEvent(t *testing.T) {
 					clock:                            tt.fields.clock,
 				},
 			}
-			if err := m.processShutdownEvent(); (err != nil) != tt.wantErr {
+			if err := m.processShutdownEvent(context.Background()); (err != nil) != tt.wantErr {
 				t.Errorf("managerImpl.processShutdownEvent() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -739,7 +735,6 @@ func Test_processShutdownEvent_VolumeUnmountTimeout(t *testing.T) {
 		logger:   logger,
 		recorder: fakeRecorder,
 		nodeRef:  nodeRef,
-		ctx:      context.Background(),
 		getPods: func() []*v1.Pod {
 			return []*v1.Pod{
 				makePod("test-pod", 1, nil),
@@ -748,7 +743,6 @@ func Test_processShutdownEvent_VolumeUnmountTimeout(t *testing.T) {
 		syncNodeStatus: syncNodeStatus,
 		dbusCon:        &fakeDbus{},
 		podManager: &podManager{
-			ctx:           context.Background(),
 			logger:        logger,
 			volumeManager: fakeVolumeManager,
 			shutdownGracePeriodByPodPriority: []kubeletconfig.ShutdownGracePeriodByPodPriority{
@@ -765,7 +759,7 @@ func Test_processShutdownEvent_VolumeUnmountTimeout(t *testing.T) {
 	}
 
 	start := fakeclock.Now()
-	err := m.processShutdownEvent()
+	err := m.processShutdownEvent(context.Background())
 	end := fakeclock.Now()
 
 	require.NoError(t, err, "managerImpl.processShutdownEvent() should not return an error")
@@ -806,14 +800,12 @@ func Test_processShutdownEvent_VolumeUnmountCancelledByManagerContext(t *testing
 		logger:         logger,
 		recorder:       fakeRecorder,
 		nodeRef:        nodeRef,
-		ctx:            ctx,
 		syncNodeStatus: syncNodeStatus,
 		dbusCon:        &fakeDbus{},
 		getPods: func() []*v1.Pod {
 			return []*v1.Pod{makePod("test-pod", 1, nil)}
 		},
 		podManager: &podManager{
-			ctx:           ctx,
 			logger:        logger,
 			volumeManager: fakeVolumeManager,
 			shutdownGracePeriodByPodPriority: []kubeletconfig.ShutdownGracePeriodByPodPriority{{
@@ -829,7 +821,7 @@ func Test_processShutdownEvent_VolumeUnmountCancelledByManagerContext(t *testing
 
 	doneCh := make(chan struct{})
 	go func() {
-		_ = m.processShutdownEvent()
+		_ = m.processShutdownEvent(ctx)
 		close(doneCh)
 	}()
 

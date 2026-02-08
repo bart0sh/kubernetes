@@ -54,7 +54,6 @@ type managerImpl struct {
 	logger   klog.Logger
 	recorder record.EventRecorder
 	nodeRef  *v1.ObjectReference
-	ctx      context.Context
 
 	getPods        eviction.ActivePodsFunc
 	syncNodeStatus func(context.Context)
@@ -84,16 +83,10 @@ func NewManager(conf *Config) Manager {
 		return m
 	}
 
-	managerCtx := conf.Context
-	if managerCtx == nil {
-		managerCtx = context.Background()
-	}
-
 	manager := &managerImpl{
 		logger:         conf.Logger,
 		recorder:       conf.Recorder,
 		nodeRef:        conf.NodeRef,
-		ctx:            managerCtx,
 		getPods:        conf.GetPodsFunc,
 		syncNodeStatus: conf.SyncNodeStatusFunc,
 		podManager:     podManager,
@@ -143,7 +136,11 @@ func (m *managerImpl) setMetrics() {
 }
 
 // Start starts the node shutdown manager and will start watching the node for shutdown events.
-func (m *managerImpl) Start() error {
+func (m *managerImpl) Start(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	m.logger.V(1).Info("Shutdown manager get started")
 
 	_, err := m.start()
@@ -255,9 +252,9 @@ func (m *managerImpl) ProcessShutdownEvent() error {
 	m.nodeShuttingDownMutex.Unlock()
 
 	// ProcessShutdownEvent is invoked by the Windows service handler without an upper-level context.
-	// Use the manager context (typically the Kubelet context) to ensure sync operations are
-	// cancelled when Kubelet is terminating while preserving structured logging.
-	nodeStatusCtx := klog.NewContext(m.ctx, m.logger)
+	// Use a background context to preserve structured logging.
+	// Kubelet shutdown is driven separately via server.RequestShutdown().
+	nodeStatusCtx := klog.NewContext(context.Background(), m.logger)
 	go m.syncNodeStatus(nodeStatusCtx)
 
 	m.logger.V(1).Info("Shutdown manager processing preshutdown event")
@@ -291,7 +288,7 @@ func (m *managerImpl) ProcessShutdownEvent() error {
 		}()
 	}
 
-	return m.podManager.killPods(activePods)
+	return m.podManager.killPods(nil, activePods)
 }
 
 func (m *managerImpl) periodRequested() time.Duration {

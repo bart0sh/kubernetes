@@ -401,7 +401,6 @@ func newTestKubeletWithImageList(
 
 	// setup shutdown manager
 	shutdownManager := nodeshutdown.NewManager(&nodeshutdown.Config{
-		Context:                         context.Background(),
 		Logger:                          logger,
 		Recorder:                        fakeRecorder,
 		NodeRef:                         nodeRef,

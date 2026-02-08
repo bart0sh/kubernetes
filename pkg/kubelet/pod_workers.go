@@ -81,7 +81,11 @@ func (k *KillPodOptions) MarshalJSON() ([]byte, error) {
 // UpdatePodOptions is an options struct to pass to a UpdatePod operation.
 type UpdatePodOptions struct {
 	// Logger is used for contextual logging in code paths where no per-pod context
-	// is available.
+	// is available yet (for example, before the pod worker has initialized its
+	// context). Callers should always pass a functional logger here.
+	//
+	// As a defensive fallback (primarily for tests / legacy call sites), pod
+	// workers will default to klog.Background() when Logger is not set.
 	Logger klog.Logger
 	// The type of update (create, update, sync, kill).
 	UpdateType kubetypes.SyncPodType
@@ -758,6 +762,8 @@ func isPodStatusCacheTerminal(status *kubecontainer.PodStatus) bool {
 func (p *podWorkers) UpdatePod(options UpdatePodOptions) {
 	logger := options.Logger
 	if logger.GetSink() == nil {
+		// UpdatePodOptions.Logger should always be set by the caller. Default to a
+		// background logger only as a defensive fallback.
 		logger = klog.Background()
 		options.Logger = logger
 	}
@@ -1144,9 +1150,6 @@ func (p *podWorkers) startPodSync(podUID types.UID) (ctx context.Context, update
 	logger := klog.Background()
 	if status.pendingUpdate != nil {
 		logger = status.pendingUpdate.Logger
-		if logger.GetSink() == nil {
-			logger = klog.Background()
-		}
 	}
 	if !status.working {
 		// working is used by unit tests to observe whether a worker is currently acting on this pod

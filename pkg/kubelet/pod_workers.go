@@ -80,6 +80,12 @@ func (k *KillPodOptions) MarshalJSON() ([]byte, error) {
 
 // UpdatePodOptions is an options struct to pass to a UpdatePod operation.
 type UpdatePodOptions struct {
+	// Context is the parent context for this update. It should typically be the
+	// Kubelet context so that pod worker operations can be cancelled when Kubelet
+	// is terminating.
+	//
+	// If nil, a background context is used.
+	Context context.Context
 	// Logger is used for contextual logging in code paths where no per-pod context
 	// is available yet (for example, before the pod worker has initialized its
 	// context). Callers should always pass a functional logger here.
@@ -1175,10 +1181,15 @@ func (p *podWorkers) startPodSync(podUID types.UID) (ctx context.Context, update
 
 	// initialize a context for the worker if one does not exist
 	if status.ctx == nil || status.ctx.Err() == context.Canceled {
-		if ctx == nil {
-			ctx = klog.NewContext(context.Background(), logger)
+		parent := ctx
+		if parent == nil {
+			parent = update.Options.Context
 		}
-		status.ctx, status.cancelFn = context.WithCancel(ctx)
+		if parent == nil {
+			parent = context.Background()
+		}
+		parent = klog.NewContext(parent, logger)
+		status.ctx, status.cancelFn = context.WithCancel(parent)
 	}
 	ctx = status.ctx
 

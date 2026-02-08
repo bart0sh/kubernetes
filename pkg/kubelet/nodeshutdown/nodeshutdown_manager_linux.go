@@ -303,7 +303,9 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 					nodeStatusCtx := klog.NewContext(ctx, m.logger)
 					go m.syncNodeStatus(nodeStatusCtx)
 
-					m.processShutdownEvent(ctx)
+					if err := m.processShutdownEvent(ctx); err != nil {
+						m.logger.Error(err, "Shutdown manager failed to process shutdown event")
+					}
 				} else {
 					_ = m.acquireInhibitLock()
 				}

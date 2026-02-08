@@ -1183,7 +1183,7 @@ func (p *podWorkers) startPodSync(podUID types.UID) (ctx context.Context, update
 			parent = update.Options.Context
 		}
 		if parent == nil {
-			parent = context.Background()
+			parent = context.TODO()
 		}
 		parent = klog.NewContext(parent, logger)
 		status.ctx, status.cancelFn = context.WithCancel(parent)

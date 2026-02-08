@@ -46,7 +46,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
-var podWorkersTestCtx = context.Background()
+var podWorkersTestCtx = context.TODO()
 
 // fakePodWorkers runs sync pod function in serial, so we can have
 // deterministic behaviour in testing.
@@ -90,7 +90,11 @@ func (f *fakePodWorkers) UpdatePod(options UpdatePodOptions) {
 	case kubetypes.SyncPodKill:
 		f.triggeredDeletion = append(f.triggeredDeletion, uid)
 	default:
-		isTerminal, err := f.syncPodFn(context.Background(), options.UpdateType, options.Pod, options.MirrorPod, status)
+		ctx := options.Context
+		if ctx == nil {
+			ctx = context.TODO()
+		}
+		isTerminal, err := f.syncPodFn(ctx, options.UpdateType, options.Pod, options.MirrorPod, status)
 		if err != nil {
 			f.t.Errorf("Unexpected error: %v", err)
 		}
@@ -569,7 +573,7 @@ func TestUpdatePodParallel(t *testing.T) {
 func TestUpdatePod(t *testing.T) {
 	one := int64(1)
 	hasContext := func(status *podSyncStatus) *podSyncStatus {
-		status.ctx, status.cancelFn = context.Background(), func() {}
+		status.ctx, status.cancelFn = context.TODO(), func() {}
 		return status
 	}
 	withLabel := func(pod *v1.Pod, label, value string) *v1.Pod {

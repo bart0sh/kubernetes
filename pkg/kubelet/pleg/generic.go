@@ -68,8 +68,6 @@ type GenericPLEG struct {
 	podsToReinspect map[types.UID]*kubecontainer.Pod
 	// Stop the Generic PLEG by closing the channel.
 	stopCh chan struct{}
-	// ctx is used for cancellation-aware runtime calls in Relist.
-	ctx context.Context
 	// Locks the relisting of the Generic PLEG
 	relistLock sync.Mutex
 	// Indicates if the Generic PLEG is running or not
@@ -159,7 +157,6 @@ func (g *GenericPLEG) Start(ctx context.Context) {
 	defer g.runningMu.Unlock()
 	if !g.isRunning {
 		g.isRunning = true
-		g.ctx = ctx
 		g.stopCh = make(chan struct{})
 		go wait.Until(func() { g.Relist(ctx) }, g.relistDuration.RelistPeriod, g.stopCh)
 	}
@@ -237,9 +234,6 @@ func (g *GenericPLEG) updateRelistTime(timestamp time.Time) {
 func (g *GenericPLEG) Relist(ctx context.Context) {
 	g.relistLock.Lock()
 	defer g.relistLock.Unlock()
-	if ctx == nil {
-		ctx = g.ctx
-	}
 	if ctx == nil {
 		ctx = context.TODO()
 	}

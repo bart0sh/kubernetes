@@ -129,7 +129,7 @@ func (e *EventedPLEG) Start(ctx context.Context) {
 	e.genericPleg.Start(ctx)
 	e.stopCh = make(chan struct{})
 	e.stopCacheUpdateCh = make(chan struct{})
-	go wait.Until(e.watchEventsChannel, 0, e.stopCh)
+	go wait.Until(func() { e.watchEventsChannel(ctx) }, 0, e.stopCh)
 	go wait.Until(e.updateGlobalCache, globalCacheUpdatePeriod, e.stopCacheUpdateCh)
 }
 
@@ -177,12 +177,16 @@ func (e *EventedPLEG) Healthy() (bool, error) {
 	return true, nil
 }
 
-func (e *EventedPLEG) watchEventsChannel() {
+func (e *EventedPLEG) watchEventsChannel(ctx context.Context) {
 	containerEventsResponseCh := make(chan *runtimeapi.ContainerEventResponse, cap(e.eventChannel))
 	defer close(containerEventsResponseCh)
 
 	// Get the container events from the runtime.
 	go func() {
+		streamCtx := ctx
+		if streamCtx == nil {
+			streamCtx = context.TODO()
+		}
 		numAttempts := 0
 		for {
 			if numAttempts >= e.eventedPlegMaxStreamRetries {
@@ -192,18 +196,18 @@ func (e *EventedPLEG) watchEventsChannel() {
 					e.Stop()
 					e.genericPleg.Stop()       // Stop the existing Generic PLEG which runs with longer relisting period when Evented PLEG is in use.
 					e.Update(e.relistDuration) // Update the relisting period to the default value for the Generic PLEG.
-					e.genericPleg.Start(e.genericPlegCtx())
+					e.genericPleg.Start(streamCtx)
 					break
 				}
 			}
 
-			err := e.runtimeService.GetContainerEvents(e.genericPlegCtx(), containerEventsResponseCh, func(runtimeapi.RuntimeService_GetContainerEventsClient) {
+			err := e.runtimeService.GetContainerEvents(streamCtx, containerEventsResponseCh, func(runtimeapi.RuntimeService_GetContainerEventsClient) {
 				metrics.EventedPLEGConn.Inc()
 			})
 			if err != nil {
 				metrics.EventedPLEGConnErr.Inc()
 				numAttempts++
-				e.Relist(e.genericPlegCtx()) // Force a relist to get the latest container and pods running metric.
+				e.Relist(streamCtx) // Force a relist to get the latest container and pods running metric.
 				e.logger.V(4).Info("Evented PLEG: Failed to get container events, retrying: ", "err", err)
 			}
 		}
@@ -213,16 +217,6 @@ func (e *EventedPLEG) watchEventsChannel() {
 		e.processCRIEvents(containerEventsResponseCh)
 	}
 }
-
-func (e *EventedPLEG) genericPlegCtx() context.Context {
-	if genericPLEG, ok := e.genericPleg.(*GenericPLEG); ok {
-		if genericPLEG.ctx != nil {
-			return genericPLEG.ctx
-		}
-	}
-	return context.TODO()
-}
-
 func (e *EventedPLEG) processCRIEvents(containerEventsResponseCh chan *runtimeapi.ContainerEventResponse) {
 	for event := range containerEventsResponseCh {
 		// Ignore the event if PodSandboxStatus is nil.

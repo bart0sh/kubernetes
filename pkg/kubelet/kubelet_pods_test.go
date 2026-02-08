@@ -6306,7 +6306,7 @@ func TestConvertToAPIContainerStatusesForUser(t *testing.T) {
 
 func TestKubelet_HandlePodCleanups(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	ctx := context.Background()
+	ctx := tCtx
 	one := int64(1)
 	two := int64(2)
 	deleted := metav1.NewTime(time.Unix(2, 0).UTC())

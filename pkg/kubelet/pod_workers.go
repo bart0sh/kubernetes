@@ -83,15 +83,10 @@ type UpdatePodOptions struct {
 	// Context is the parent context for this update. It should typically be the
 	// Kubelet context so that pod worker operations can be cancelled when Kubelet
 	// is terminating.
-	//
-	// If nil, a background context is used.
 	Context context.Context
 	// Logger is used for contextual logging in code paths where no per-pod context
 	// is available yet (for example, before the pod worker has initialized its
-	// context). Callers should always pass a functional logger here.
-	//
-	// As a defensive fallback (primarily for tests / legacy call sites), pod
-	// workers will default to klog.Background() when Logger is not set.
+	// context). Callers should pass a functional logger.
 	Logger klog.Logger
 	// The type of update (create, update, sync, kill).
 	UpdateType kubetypes.SyncPodType
@@ -768,9 +763,11 @@ func isPodStatusCacheTerminal(status *kubecontainer.PodStatus) bool {
 func (p *podWorkers) UpdatePod(options UpdatePodOptions) {
 	logger := options.Logger
 	if logger.GetSink() == nil {
-		// UpdatePodOptions.Logger should always be set by the caller. Default to a
-		// background logger only as a defensive fallback.
-		logger = klog.Background()
+		parentCtx := options.Context
+		if parentCtx == nil {
+			parentCtx = context.TODO()
+		}
+		logger = klog.FromContext(parentCtx)
 		options.Logger = logger
 	}
 	// Handle when the pod is an orphan (no config) and we only have runtime status by running only

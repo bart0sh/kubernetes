@@ -2644,8 +2644,8 @@ func TestReconcileExtendedResource(t *testing.T) {
 		defer testKubelet.Cleanup()
 		kubelet := testKubelet.kubelet
 
-		ctx := ktesting.Init(t)
-		needsUpdate := kubelet.reconcileExtendedResource(ctx, tc.initialNode, tc.existingNode)
+		logger, _ := ktesting.NewTestContext(t)
+		needsUpdate := kubelet.reconcileExtendedResource(logger, tc.initialNode, tc.existingNode)
 		assert.Equal(t, tc.needsUpdate, needsUpdate, tc.name)
 		assert.Equal(t, tc.expectedNode, tc.existingNode, tc.name)
 	}

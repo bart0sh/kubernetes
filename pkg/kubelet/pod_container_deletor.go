@@ -51,26 +51,15 @@ func (a containerStatusbyCreatedList) Less(i, j int) bool {
 }
 
 func newPodContainerDeletor(logger klog.Logger, runtime kubecontainer.Runtime, containersToKeep int) *podContainerDeletor {
-	// newPodContainerDeletor expects a functional logger to be provided by the caller.
-	// However, some tests or legacy call sites might pass a zero-value logger.
-	// Fall back to a background logger to keep structured logging functional.
-	defaultLogger := logger
-	if defaultLogger.GetSink() == nil {
-		defaultLogger = klog.Background()
-	}
 	buffer := make(chan containerDeleteRequest, containerDeletorBufferLimit)
 	go wait.Until(func() {
 		for {
 			req := <-buffer
-			reqLogger := req.logger
-			if reqLogger.GetSink() == nil {
-				reqLogger = defaultLogger
-			}
 			if req.ctx == nil {
 				req.ctx = context.Background()
 			}
 			if err := runtime.DeleteContainer(req.ctx, req.id); err != nil {
-				reqLogger.Info("DeleteContainer returned error", "containerID", req.id, "err", err)
+				req.logger.Info("DeleteContainer returned error", "containerID", req.id, "err", err)
 			}
 		}
 	}, 0, wait.NeverStop)

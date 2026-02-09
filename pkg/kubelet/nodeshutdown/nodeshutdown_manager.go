@@ -127,10 +127,6 @@ func newPodManager(conf *Config) *podManager {
 
 // killPods terminates pods by priority.
 func (m *podManager) killPods(ctx context.Context, activePods []*v1.Pod) error {
-	if ctx == nil {
-		return fmt.Errorf("pod manager requires a non-nil context")
-	}
-
 	groups := groupByPriority(m.shutdownGracePeriodByPodPriority, activePods)
 	for _, group := range groups {
 		// If there are no pods in a particular range,

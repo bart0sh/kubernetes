@@ -228,11 +228,7 @@ func Test_managerImpl_ProcessShutdownEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logger := ktesting.NewLogger(t,
-				ktesting.NewConfig(
-					ktesting.BufferLogs(true),
-				),
-			)
+			logger, tCtx := ktesting.NewTestContext(t)
 			m := &managerImpl{
 				logger:                logger,
 				recorder:              tt.fields.recorder,
@@ -249,7 +245,7 @@ func Test_managerImpl_ProcessShutdownEvent(t *testing.T) {
 					clock:                            tt.fields.clock,
 				},
 			}
-			if err := m.ProcessShutdownEvent(); (err != nil) != tt.wantErr {
+			if err := m.ProcessShutdownEvent(tCtx); (err != nil) != tt.wantErr {
 				t.Errorf("managerImpl.processShutdownEvent() error = %v, wantErr %v", err, tt.wantErr)
 			}
 

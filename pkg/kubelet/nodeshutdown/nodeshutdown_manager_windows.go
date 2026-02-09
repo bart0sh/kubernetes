@@ -242,7 +242,7 @@ func (m *managerImpl) ShutdownStatus() error {
 	return nil
 }
 
-func (m *managerImpl) ProcessShutdownEvent() error {
+func (m *managerImpl) ProcessShutdownEvent(ctx context.Context) error {
 	m.logger.V(1).Info("Shutdown manager detected new preshutdown event", "event", "preshutdown")
 
 	m.recorder.Event(m.nodeRef, v1.EventTypeNormal, kubeletevents.NodeShutdown, "Shutdown manager detected preshutdown event")
@@ -251,7 +251,7 @@ func (m *managerImpl) ProcessShutdownEvent() error {
 	m.nodeShuttingDownNow = true
 	m.nodeShuttingDownMutex.Unlock()
 
-	go m.syncNodeStatus(klog.NewContext(context.TODO(), m.logger))
+	go m.syncNodeStatus(ctx)
 
 	m.logger.V(1).Info("Shutdown manager processing preshutdown event")
 	activePods := m.getPods()
@@ -284,7 +284,7 @@ func (m *managerImpl) ProcessShutdownEvent() error {
 		}()
 	}
 
-	return m.podManager.killPods(nil, activePods)
+	return m.podManager.killPods(ctx, activePods)
 }
 
 func (m *managerImpl) periodRequested() time.Duration {

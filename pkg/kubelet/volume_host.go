@@ -173,7 +173,8 @@ func (kvh *kubeletVolumeHost) CSIDriversSynced() cache.InformerSynced {
 
 // WaitForCacheSync is a helper function that waits for cache sync for CSIDriverLister
 func (kvh *kubeletVolumeHost) WaitForCacheSync() error {
-	logger := klog.Background()
+	// TODO: VolumeHost interface should be updated to accept context or logger parameters.
+	logger := klog.TODO()
 	if kvh.csiDriversSynced == nil {
 		logger.Error(nil, "CsiDriversSynced not found on KubeletVolumeHost")
 		return fmt.Errorf("csiDriversSynced not found on KubeletVolumeHost")
@@ -192,7 +193,8 @@ func (kvh *kubeletVolumeHost) NewWrapperMounter(
 	volName string,
 	spec volume.Spec,
 	pod *v1.Pod) (volume.Mounter, error) {
-	logger := klog.Background()
+	// TODO: VolumeHost interface should be updated to accept context or logger parameters.
+	logger := klog.TODO()
 	// The name of wrapper volume is set to "wrapped_{wrapped_volume_name}"
 	wrapperVolumeName := "wrapped_" + volName
 	if spec.Volume != nil {
@@ -222,8 +224,8 @@ func (kvh *kubeletVolumeHost) GetMounter() mount.Interface {
 }
 
 func (kvh *kubeletVolumeHost) GetNodeAllocatable() (v1.ResourceList, error) {
-	logger := klog.Background()
 	// TODO: Pass proper context when VolumeHost interface methods support context parameters
+	logger := klog.TODO()
 	ctx := klog.NewContext(context.TODO(), logger)
 	node, err := kvh.kubelet.getNodeAnyWay(ctx)
 	if err != nil {
@@ -271,8 +273,8 @@ func (kvh *kubeletVolumeHost) GetPodCertificateCredentialBundle(ctx context.Cont
 }
 
 func (kvh *kubeletVolumeHost) GetNodeLabels() (map[string]string, error) {
-	logger := klog.Background()
 	// TODO: Pass proper context when VolumeHost interface methods support context parameters
+	logger := klog.TODO()
 	ctx := klog.NewContext(context.TODO(), logger)
 	node, err := kvh.kubelet.GetNode(ctx)
 	if err != nil {
@@ -282,8 +284,8 @@ func (kvh *kubeletVolumeHost) GetNodeLabels() (map[string]string, error) {
 }
 
 func (kvh *kubeletVolumeHost) GetAttachedVolumesFromNodeStatus() (map[v1.UniqueVolumeName]string, error) {
-	logger := klog.Background()
 	// TODO: Pass proper context when VolumeHost interface methods support context parameters
+	logger := klog.TODO()
 	ctx := klog.NewContext(context.TODO(), logger)
 	node, err := kvh.kubelet.GetNode(ctx)
 	if err != nil {

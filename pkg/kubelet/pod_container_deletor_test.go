@@ -21,12 +21,12 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/klog/v2"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
+	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
 func TestGetContainersToDeleteInPodWithFilter(t *testing.T) {
-	logger := klog.Background()
+	logger, _ := ktesting.NewTestContext(t)
 	pod := kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
 			{
@@ -89,7 +89,7 @@ func TestGetContainersToDeleteInPodWithFilter(t *testing.T) {
 }
 
 func TestGetContainersToDeleteInPod(t *testing.T) {
-	logger := klog.Background()
+	logger, _ := ktesting.NewTestContext(t)
 	pod := kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
 			{
@@ -152,7 +152,7 @@ func TestGetContainersToDeleteInPod(t *testing.T) {
 }
 
 func TestGetContainersToDeleteInPodWithNoMatch(t *testing.T) {
-	logger := klog.Background()
+	logger, _ := ktesting.NewTestContext(t)
 	pod := kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
 			{

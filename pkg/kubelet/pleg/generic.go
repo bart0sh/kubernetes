@@ -234,9 +234,6 @@ func (g *GenericPLEG) updateRelistTime(timestamp time.Time) {
 func (g *GenericPLEG) Relist(ctx context.Context) {
 	g.relistLock.Lock()
 	defer g.relistLock.Unlock()
-	if ctx == nil {
-		ctx = context.TODO()
-	}
 	logger := g.logger
 
 	logger.V(5).Info("GenericPLEG: Relisting")

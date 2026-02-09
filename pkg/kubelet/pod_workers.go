@@ -762,12 +762,10 @@ func isPodStatusCacheTerminal(status *kubecontainer.PodStatus) bool {
 // discovered to have a terminal phase (Succeeded or Failed), or evicted by the kubelet.
 func (p *podWorkers) UpdatePod(options UpdatePodOptions) {
 	logger := options.Logger
+	// Fallback to extracting logger from context if not provided directly.
+	// This supports callers like killPodNow that cannot easily pass a logger.
 	if logger.GetSink() == nil {
-		parentCtx := options.Context
-		if parentCtx == nil {
-			parentCtx = context.TODO()
-		}
-		logger = klog.FromContext(parentCtx)
+		logger = klog.FromContext(options.Context)
 		options.Logger = logger
 	}
 	// Handle when the pod is an orphan (no config) and we only have runtime status by running only
@@ -1747,6 +1745,7 @@ func killPodNow(podWorkers PodWorkers, recorder record.EventRecorder) eviction.K
 		// open a channel we block against until we get a result
 		ch := make(chan struct{}, 1)
 		podWorkers.UpdatePod(UpdatePodOptions{
+			Context:    context.TODO(),
 			Pod:        pod,
 			UpdateType: kubetypes.SyncPodKill,
 			KillPodOptions: &KillPodOptions{

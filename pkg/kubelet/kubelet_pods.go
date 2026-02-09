@@ -1350,6 +1350,7 @@ func (kl *Kubelet) HandlePodCleanups(ctx context.Context) error {
 		}
 		kl.podWorkers.UpdatePod(UpdatePodOptions{
 			Context:    ctx,
+			Logger:     logger,
 			UpdateType: kubetypes.SyncPodCreate,
 			Pod:        pod,
 			MirrorPod:  mirrorPod,
@@ -1380,6 +1381,7 @@ func (kl *Kubelet) HandlePodCleanups(ctx context.Context) error {
 		logger.V(3).Info("Handling termination and deletion of the pod to pod workers", "pod", klog.KObj(pod), "podUID", pod.UID)
 		kl.podWorkers.UpdatePod(UpdatePodOptions{
 			Context:    ctx,
+			Logger:     logger,
 			UpdateType: kubetypes.SyncPodKill,
 			Pod:        pod,
 		})

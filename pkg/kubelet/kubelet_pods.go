@@ -1406,6 +1406,7 @@ func (kl *Kubelet) HandlePodCleanups(ctx context.Context) error {
 			logger.V(2).Info("Clean up containers for orphaned pod we had not seen before", "podUID", runningPod.ID, "killPodOptions", killPodOptions)
 			kl.podWorkers.UpdatePod(UpdatePodOptions{
 				Context:        ctx,
+				Logger:         logger,
 				UpdateType:     kubetypes.SyncPodKill,
 				RunningPod:     runningPod,
 				KillPodOptions: killPodOptions,

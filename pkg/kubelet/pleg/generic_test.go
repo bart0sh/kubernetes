@@ -361,20 +361,19 @@ func createTestPodsStatusesAndEvents(num int) ([]*kubecontainer.Pod, []*kubecont
 
 func TestRelistWithCache(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	ctx := klog.NewContext(tCtx, klog.Logger{})
 	runtimeMock := containertest.NewMockRuntime(t)
 
 	pleg := newTestGenericPLEGWithRuntimeMock(runtimeMock)
 	ch := pleg.Watch()
 
 	pods, statuses, events := createTestPodsStatusesAndEvents(2)
-	runtimeMock.EXPECT().GetPods(ctx, true).Return(pods, nil).Maybe()
-	runtimeMock.EXPECT().GetPodStatus(ctx, pods[0].ID, "", "").Return(statuses[0], nil).Times(1)
+	runtimeMock.EXPECT().GetPods(tCtx, true).Return(pods, nil).Maybe()
+	runtimeMock.EXPECT().GetPodStatus(tCtx, pods[0].ID, "", "").Return(statuses[0], nil).Times(1)
 	// Inject an error when querying runtime for the pod status for pods[1].
 	statusErr := fmt.Errorf("unable to get status")
-	runtimeMock.EXPECT().GetPodStatus(ctx, pods[1].ID, "", "").Return(&kubecontainer.PodStatus{}, statusErr).Times(1)
+	runtimeMock.EXPECT().GetPodStatus(tCtx, pods[1].ID, "", "").Return(&kubecontainer.PodStatus{}, statusErr).Times(1)
 
-	pleg.Relist(ctx)
+	pleg.Relist(tCtx)
 	actualEvents := getEventsFromChannel(ch)
 	cases := []struct {
 		pod    *kubecontainer.Pod
@@ -394,8 +393,8 @@ func TestRelistWithCache(t *testing.T) {
 	assert.Exactly(t, []*PodLifecycleEvent{events[0]}, actualEvents)
 
 	// Return normal status for pods[1].
-	runtimeMock.EXPECT().GetPodStatus(ctx, pods[1].ID, "", "").Return(statuses[1], nil).Times(1)
-	pleg.Relist(ctx)
+	runtimeMock.EXPECT().GetPodStatus(tCtx, pods[1].ID, "", "").Return(statuses[1], nil).Times(1)
+	pleg.Relist(tCtx)
 	actualEvents = getEventsFromChannel(ch)
 	cases = []struct {
 		pod    *kubecontainer.Pod
@@ -417,19 +416,18 @@ func TestRelistWithCache(t *testing.T) {
 
 func TestRemoveCacheEntry(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	ctx := klog.NewContext(tCtx, klog.Logger{})
 	runtimeMock := containertest.NewMockRuntime(t)
 	pleg := newTestGenericPLEGWithRuntimeMock(runtimeMock)
 
 	pods, statuses, _ := createTestPodsStatusesAndEvents(1)
-	runtimeMock.EXPECT().GetPods(ctx, true).Return(pods, nil).Times(1)
-	runtimeMock.EXPECT().GetPodStatus(ctx, pods[0].ID, "", "").Return(statuses[0], nil).Times(1)
+	runtimeMock.EXPECT().GetPods(tCtx, true).Return(pods, nil).Times(1)
+	runtimeMock.EXPECT().GetPodStatus(tCtx, pods[0].ID, "", "").Return(statuses[0], nil).Times(1)
 	// Does a relist to populate the cache.
-	pleg.Relist(ctx)
+	pleg.Relist(tCtx)
 	// Delete the pod from runtime. Verify that the cache entry has been
 	// removed after relisting.
-	runtimeMock.EXPECT().GetPods(ctx, true).Return([]*kubecontainer.Pod{}, nil).Times(1)
-	pleg.Relist(ctx)
+	runtimeMock.EXPECT().GetPods(tCtx, true).Return([]*kubecontainer.Pod{}, nil).Times(1)
+	pleg.Relist(tCtx)
 	actualStatus, actualErr := pleg.cache.Get(pods[0].ID)
 	assert.Equal(t, &kubecontainer.PodStatus{ID: pods[0].ID}, actualStatus)
 	assert.NoError(t, actualErr)
@@ -465,7 +463,6 @@ func TestHealthy(t *testing.T) {
 
 func TestRelistWithReinspection(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	ctx := klog.NewContext(tCtx, klog.Logger{})
 	runtimeMock := containertest.NewMockRuntime(t)
 
 	pleg := newTestGenericPLEGWithRuntimeMock(runtimeMock)
@@ -478,18 +475,18 @@ func TestRelistWithReinspection(t *testing.T) {
 		ID:         podID,
 		Containers: []*kubecontainer.Container{infraContainer},
 	}}
-	runtimeMock.EXPECT().GetPods(ctx, true).Return(pods, nil).Times(1)
+	runtimeMock.EXPECT().GetPods(tCtx, true).Return(pods, nil).Times(1)
 
 	goodStatus := &kubecontainer.PodStatus{
 		ID:                podID,
 		ContainerStatuses: []*kubecontainer.Status{{ID: infraContainer.ID, State: infraContainer.State}},
 	}
-	runtimeMock.EXPECT().GetPodStatus(ctx, podID, "", "").Return(goodStatus, nil).Times(1)
+	runtimeMock.EXPECT().GetPodStatus(tCtx, podID, "", "").Return(goodStatus, nil).Times(1)
 
 	goodEvent := &PodLifecycleEvent{ID: podID, Type: ContainerStarted, Data: infraContainer.ID.ID}
 
 	// listing 1 - everything ok, infra container set up for pod
-	pleg.Relist(ctx)
+	pleg.Relist(tCtx)
 	actualEvents := getEventsFromChannel(ch)
 	actualStatus, actualErr := pleg.cache.Get(podID)
 	assert.Equal(t, goodStatus, actualStatus)
@@ -503,15 +500,15 @@ func TestRelistWithReinspection(t *testing.T) {
 		ID:         podID,
 		Containers: []*kubecontainer.Container{infraContainer, transientContainer},
 	}}
-	runtimeMock.EXPECT().GetPods(ctx, true).Return(podsWithTransientContainer, nil).Times(1)
+	runtimeMock.EXPECT().GetPods(tCtx, true).Return(podsWithTransientContainer, nil).Times(1)
 
 	badStatus := &kubecontainer.PodStatus{
 		ID:                podID,
 		ContainerStatuses: []*kubecontainer.Status{},
 	}
-	runtimeMock.EXPECT().GetPodStatus(ctx, podID, "", "").Return(badStatus, errors.New("inspection error")).Times(1)
+	runtimeMock.EXPECT().GetPodStatus(tCtx, podID, "", "").Return(badStatus, errors.New("inspection error")).Times(1)
 
-	pleg.Relist(ctx)
+	pleg.Relist(tCtx)
 	actualEvents = getEventsFromChannel(ch)
 	actualStatus, actualErr = pleg.cache.Get(podID)
 	assert.Equal(t, badStatus, actualStatus)
@@ -520,10 +517,10 @@ func TestRelistWithReinspection(t *testing.T) {
 
 	// listing 3 - pretend the transient container has now disappeared, leaving just the infra
 	// container. Make sure the pod is reinspected for its status and the cache is updated.
-	runtimeMock.EXPECT().GetPods(ctx, true).Return(pods, nil).Times(1)
-	runtimeMock.EXPECT().GetPodStatus(ctx, podID, "", "").Return(goodStatus, nil).Times(1)
+	runtimeMock.EXPECT().GetPods(tCtx, true).Return(pods, nil).Times(1)
+	runtimeMock.EXPECT().GetPodStatus(tCtx, podID, "", "").Return(goodStatus, nil).Times(1)
 
-	pleg.Relist(ctx)
+	pleg.Relist(tCtx)
 	actualEvents = getEventsFromChannel(ch)
 	actualStatus, actualErr = pleg.cache.Get(podID)
 	assert.Equal(t, goodStatus, actualStatus)
@@ -604,7 +601,6 @@ func TestRelistingWithSandboxes(t *testing.T) {
 
 func TestRelistIPChange(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	ctx := klog.NewContext(tCtx, klog.Logger{})
 	testCases := []struct {
 		name   string
 		podID  string
@@ -642,10 +638,10 @@ func TestRelistIPChange(t *testing.T) {
 		}
 		event := &PodLifecycleEvent{ID: pod.ID, Type: ContainerStarted, Data: container.ID.ID}
 
-		runtimeMock.EXPECT().GetPods(ctx, true).Return([]*kubecontainer.Pod{pod}, nil).Times(1)
-		runtimeMock.EXPECT().GetPodStatus(ctx, pod.ID, "", "").Return(status, nil).Times(1)
+		runtimeMock.EXPECT().GetPods(tCtx, true).Return([]*kubecontainer.Pod{pod}, nil).Times(1)
+		runtimeMock.EXPECT().GetPodStatus(tCtx, pod.ID, "", "").Return(status, nil).Times(1)
 
-		pleg.Relist(ctx)
+		pleg.Relist(tCtx)
 		actualEvents := getEventsFromChannel(ch)
 		actualStatus, actualErr := pleg.cache.Get(pod.ID)
 		assert.Equal(t, status, actualStatus, tc.name)
@@ -663,10 +659,10 @@ func TestRelistIPChange(t *testing.T) {
 			ContainerStatuses: []*kubecontainer.Status{{ID: container.ID, State: kubecontainer.ContainerStateExited}},
 		}
 		event = &PodLifecycleEvent{ID: pod.ID, Type: ContainerDied, Data: container.ID.ID}
-		runtimeMock.EXPECT().GetPods(ctx, true).Return([]*kubecontainer.Pod{pod}, nil).Times(1)
-		runtimeMock.EXPECT().GetPodStatus(ctx, pod.ID, "", "").Return(status, nil).Times(1)
+		runtimeMock.EXPECT().GetPods(tCtx, true).Return([]*kubecontainer.Pod{pod}, nil).Times(1)
+		runtimeMock.EXPECT().GetPodStatus(tCtx, pod.ID, "", "").Return(status, nil).Times(1)
 
-		pleg.Relist(ctx)
+		pleg.Relist(tCtx)
 		actualEvents = getEventsFromChannel(ch)
 		actualStatus, actualErr = pleg.cache.Get(pod.ID)
 		// Must copy status to compare since its pointer gets passed through all

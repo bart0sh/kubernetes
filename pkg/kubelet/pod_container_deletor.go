@@ -55,9 +55,6 @@ func newPodContainerDeletor(logger klog.Logger, runtime kubecontainer.Runtime, c
 	go wait.Until(func() {
 		for {
 			req := <-buffer
-			if req.ctx == nil {
-				req.ctx = context.Background()
-			}
 			if err := runtime.DeleteContainer(req.ctx, req.id); err != nil {
 				req.logger.Info("DeleteContainer returned error", "containerID", req.id, "err", err)
 			}
@@ -109,8 +106,13 @@ func getContainersToDeleteInPod(filterContainerID string, podStatus *kubecontain
 }
 
 // deleteContainersInPod issues container deletion requests for containers selected by getContainersToDeleteInPod.
-func (p *podContainerDeletor) deleteContainersInPod(logger klog.Logger, filterContainerID string, podStatus *kubecontainer.PodStatus, removeAll bool) {
-	ctx := klog.NewContext(context.Background(), logger)
+func (p *podContainerDeletor) deleteContainersInPod(ctx context.Context, filterContainerID string, podStatus *kubecontainer.PodStatus, removeAll bool) {
+	if ctx == nil {
+		// deleteContainersInPod is expected to receive an upper-level context
+		// from callers. Keep TODO as a defensive fallback for nil callers.
+		ctx = context.TODO()
+	}
+	logger := klog.FromContext(ctx)
 	containersToKeep := p.containersToKeep
 	if removeAll {
 		containersToKeep = 0

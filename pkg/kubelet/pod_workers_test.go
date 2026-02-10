@@ -92,7 +92,7 @@ func (f *fakePodWorkers) UpdatePod(options UpdatePodOptions) {
 	default:
 		ctx := options.Context
 		if ctx == nil {
-			ctx = context.TODO()
+			ctx = podWorkersTestCtx
 		}
 		isTerminal, err := f.syncPodFn(ctx, options.UpdateType, options.Pod, options.MirrorPod, status)
 		if err != nil {
@@ -377,8 +377,8 @@ func (w *timeIncrementingWorkers) tick() {
 // createTimeIncrementingPodWorkers will guarantee that each call to UpdatePod and each worker goroutine invocation advances the clock by one second,
 // although multiple workers will advance the clock in an unpredictable order. Use to observe
 // successive internal updates to each update pod state when only a single pod is being updated.
-func createTimeIncrementingPodWorkers() (*timeIncrementingWorkers, map[types.UID][]syncPodRecord) {
-	nested, runtime, processed := createPodWorkers(klog.Background())
+func createTimeIncrementingPodWorkers(logger klog.Logger) (*timeIncrementingWorkers, map[types.UID][]syncPodRecord) {
+	nested, runtime, processed := createPodWorkers(logger)
 	w := &timeIncrementingWorkers{
 		w:       nested,
 		runtime: runtime,
@@ -572,8 +572,8 @@ func TestUpdatePodParallel(t *testing.T) {
 
 func TestUpdatePod(t *testing.T) {
 	one := int64(1)
-	hasContext := func(status *podSyncStatus) *podSyncStatus {
-		status.ctx, status.cancelFn = context.TODO(), func() {}
+	hasCancelFn := func(status *podSyncStatus) *podSyncStatus {
+		status.cancelFn = func() {}
 		return status
 	}
 	withLabel := func(pod *v1.Pod, label, value string) *v1.Pod {
@@ -607,11 +607,6 @@ func TestUpdatePod(t *testing.T) {
 			clearLogger(status.pendingUpdate)
 			clearLogger(status.activeUpdate)
 
-			if e, a := expected.ctx != nil, status.ctx != nil; e != a {
-				t.Errorf("expected context %t, has context %t", e, a)
-			} else {
-				expected.ctx, status.ctx = nil, nil
-			}
 			if e, a := expected.cancelFn != nil, status.cancelFn != nil; e != a {
 				t.Errorf("expected cancelFn %t, has cancelFn %t", e, a)
 			} else {
@@ -639,7 +634,7 @@ func TestUpdatePod(t *testing.T) {
 				UpdateType: kubetypes.SyncPodCreate,
 				Pod:        newNamedPod("1", "ns", "running-pod", false),
 			},
-			expect: hasContext(&podSyncStatus{
+			expect: hasCancelFn(&podSyncStatus{
 				fullname:  "running-pod_ns",
 				syncedAt:  time.Unix(1, 0),
 				startedAt: time.Unix(3, 0),
@@ -670,7 +665,7 @@ func TestUpdatePod(t *testing.T) {
 				})
 				return func() { w.ReleaseWorkersUnderLock("1") }
 			},
-			expect: hasContext(&podSyncStatus{
+			expect: hasCancelFn(&podSyncStatus{
 				fullname:           "running-pod_ns",
 				syncedAt:           time.Unix(1, 0),
 				startedAt:          time.Unix(3, 0),
@@ -696,7 +691,7 @@ func TestUpdatePod(t *testing.T) {
 				Pod:        newNamedPod("1", "ns", "running-pod", false),
 				RunningPod: &kubecontainer.Pod{ID: "1", Name: "orphaned-pod", Namespace: "ns"},
 			},
-			expect: hasContext(&podSyncStatus{
+			expect: hasCancelFn(&podSyncStatus{
 				fullname:  "running-pod_ns",
 				syncedAt:  time.Unix(1, 0),
 				startedAt: time.Unix(3, 0),
@@ -721,7 +716,7 @@ func TestUpdatePod(t *testing.T) {
 				})
 				return nil
 			},
-			expect: hasContext(&podSyncStatus{
+			expect: hasCancelFn(&podSyncStatus{
 				fullname:           "running-pod_ns",
 				syncedAt:           time.Unix(1, 0),
 				startedAt:          time.Unix(3, 0),
@@ -755,7 +750,7 @@ func TestUpdatePod(t *testing.T) {
 				})
 				return nil
 			},
-			expect: hasContext(&podSyncStatus{
+			expect: hasCancelFn(&podSyncStatus{
 				fullname:           "running-pod_ns",
 				syncedAt:           time.Unix(1, 0),
 				startedAt:          time.Unix(3, 0),
@@ -783,7 +778,7 @@ func TestUpdatePod(t *testing.T) {
 				UpdateType: kubetypes.SyncPodCreate,
 				Pod:        newPodWithPhase("1", "done-pod", v1.PodSucceeded),
 			},
-			expect: hasContext(&podSyncStatus{
+			expect: hasCancelFn(&podSyncStatus{
 				fullname:      "done-pod_ns",
 				syncedAt:      time.Unix(1, 0),
 				terminatingAt: time.Unix(1, 0),
@@ -822,7 +817,7 @@ func TestUpdatePod(t *testing.T) {
 				startedTerminating: true,
 				working:            true,
 			},
-			expect: hasContext(&podSyncStatus{
+			expect: hasCancelFn(&podSyncStatus{
 				fullname:           "done-pod_ns",
 				syncedAt:           time.Unix(1, 0),
 				terminatingAt:      time.Unix(1, 0),
@@ -891,7 +886,8 @@ func TestUpdatePod(t *testing.T) {
 
 			var fns []func()
 
-			podWorkers, _ := createTimeIncrementingPodWorkers()
+			logger, _ := ktesting.NewTestContext(t)
+			podWorkers, _ := createTimeIncrementingPodWorkers(logger)
 
 			if tc.expectBeforeWorker != nil {
 				fns = append(fns, func() {
@@ -1054,7 +1050,7 @@ func TestCompleteWork_Enqueue(t *testing.T) {
 			podWorkers.resyncInterval = resyncInterval
 			podWorkers.backOffPeriod = defaultBackoff
 			podWorkers.podSyncStatuses[podUID] = &podSyncStatus{}
-			podWorkers.completeWork(klog.Background(), podUID, tc.phaseTransition, tc.syncErr)
+			podWorkers.completeWork(logger, podUID, tc.phaseTransition, tc.syncErr)
 
 			if fakeQueue.Empty() {
 				t.Fatalf("work queue should not be empty")
@@ -1080,13 +1076,14 @@ func TestCompleteWork_PendingUpdate(t *testing.T) {
 	podUID := types.UID("pod-with-pending-update-check")
 
 	t.Run("with nil pendingUpdate, clears working status", func(t *testing.T) {
+		logger, _ := ktesting.NewTestContext(t)
 		p := &podWorkers{
 			podSyncStatuses: make(map[types.UID]*podSyncStatus),
 			workQueue:       &fakeQueue{},
 		}
 		p.podSyncStatuses[podUID] = &podSyncStatus{working: true, pendingUpdate: nil}
 
-		p.completeWork(klog.Background(), podUID, false, nil)
+		p.completeWork(logger, podUID, false, nil)
 
 		p.podLock.Lock()
 		defer p.podLock.Unlock()
@@ -1096,6 +1093,7 @@ func TestCompleteWork_PendingUpdate(t *testing.T) {
 	})
 
 	t.Run("with non-nil pendingUpdate, queues an update signal", func(t *testing.T) {
+		logger, _ := ktesting.NewTestContext(t)
 		p := &podWorkers{
 			podSyncStatuses: make(map[types.UID]*podSyncStatus),
 			podUpdates:      make(map[types.UID]chan struct{}),
@@ -1109,7 +1107,7 @@ func TestCompleteWork_PendingUpdate(t *testing.T) {
 		}
 		p.podSyncStatuses[podUID] = &podSyncStatus{working: true, pendingUpdate: dummyUpdate}
 
-		p.completeWork(klog.Background(), podUID, false, nil)
+		p.completeWork(logger, podUID, false, nil)
 
 		select {
 		case <-p.podUpdates[podUID]:
@@ -2640,7 +2638,7 @@ func Test_allowPodStart(t *testing.T) {
 			if tc.waitingToStartStaticPodsByFullname != nil {
 				podWorkers.waitingToStartStaticPodsByFullname = tc.waitingToStartStaticPodsByFullname
 			}
-			allowed, allowedEver := podWorkers.allowPodStart(klog.Background(), tc.pod)
+			allowed, allowedEver := podWorkers.allowPodStart(logger, tc.pod)
 			if allowed != tc.allowed {
 				if tc.allowed {
 					t.Errorf("Pod should be allowed")

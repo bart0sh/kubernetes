@@ -343,11 +343,6 @@ const (
 // podSyncStatus tracks per-pod transitions through the three phases of pod
 // worker sync (setup, terminating, terminated).
 type podSyncStatus struct {
-	// ctx is the context that is associated with the current pod sync.
-	// TODO: remove this from the struct by having the context initialized
-	// in startPodSync, the cancelFn used by UpdatePod, and cancellation of
-	// a parent context for tearing down workers (if needed) on shutdown
-	ctx context.Context
 	// cancelFn if set is expected to cancel the current podSyncer operation.
 	cancelFn context.CancelFunc
 
@@ -1144,14 +1139,10 @@ func (p *podWorkers) startPodSync(podUID types.UID) (ctx context.Context, update
 	status, ok := p.podSyncStatuses[podUID]
 	if !ok {
 		// pod status has disappeared, the worker should exit
-		logger := klog.Background()
-		logger.V(4).Info("Pod worker no longer has status, worker should exit", "podUID", podUID)
+		klog.FromContext(ctx).V(4).Info("Pod worker no longer has status, worker should exit", "podUID", podUID)
 		return nil, update, false, false, false
 	}
-	logger := klog.Background()
-	if status.pendingUpdate != nil {
-		logger = status.pendingUpdate.Logger
-	}
+	logger := podWorkerLogger(status)
 	if !status.working {
 		// working is used by unit tests to observe whether a worker is currently acting on this pod
 		logger.V(4).Info("Pod should be marked as working by the pod worker, programmer error", "podUID", podUID)
@@ -1174,19 +1165,14 @@ func (p *podWorkers) startPodSync(podUID types.UID) (ctx context.Context, update
 	default:
 	}
 
-	// initialize a context for the worker if one does not exist
-	if status.ctx == nil || status.ctx.Err() == context.Canceled {
-		parent := ctx
-		if parent == nil {
-			parent = update.Options.Context
-		}
-		if parent == nil {
-			parent = context.TODO()
-		}
-		parent = klog.NewContext(parent, logger)
-		status.ctx, status.cancelFn = context.WithCancel(parent)
+	parent := update.Options.Context
+	if parent == nil {
+		// Use TODO because this path has no upper-level context and
+		// keep cancellation support via per-sync context for worker operations.
+		parent = context.TODO()
 	}
-	ctx = status.ctx
+	ctx = klog.NewContext(parent, logger)
+	ctx, status.cancelFn = context.WithCancel(ctx)
 
 	// if we are already started, make our state visible to downstream components
 	if status.IsStarted() {
@@ -1645,16 +1631,25 @@ func (p *podWorkers) SyncKnownPods(desiredPods []*v1.Pod) map[types.UID]PodWorke
 }
 
 func podWorkerLogger(status *podSyncStatus) klog.Logger {
-	if status != nil && status.ctx != nil {
-		return klog.FromContext(status.ctx)
-	}
 	if status != nil && status.pendingUpdate != nil {
 		logger := status.pendingUpdate.Logger
 		if logger.GetSink() != nil {
 			return logger
 		}
+		if status.pendingUpdate.Context != nil {
+			return klog.FromContext(status.pendingUpdate.Context)
+		}
 	}
-	return klog.Background()
+	if status != nil && status.activeUpdate != nil {
+		logger := status.activeUpdate.Logger
+		if logger.GetSink() != nil {
+			return logger
+		}
+		if status.activeUpdate.Context != nil {
+			return klog.FromContext(status.activeUpdate.Context)
+		}
+	}
+	return klog.FromContext(context.TODO())
 }
 
 // removeTerminatedWorker cleans up and removes the worker status for a worker

@@ -49,7 +49,6 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/component-base/metrics/testutil"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
-	"k8s.io/klog/v2"
 	"k8s.io/kubelet/pkg/cri/streaming/portforward"
 	"k8s.io/kubelet/pkg/cri/streaming/remotecommand"
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
@@ -7534,8 +7533,7 @@ func testMetric(t *testing.T, metricName string, expectedMetric string) {
 }
 
 func TestGetNonExistentImagePullSecret(t *testing.T) {
-	_, tCtx := ktesting.NewTestContext(t)
-	logger := klog.FromContext(tCtx)
+	logger, _ := ktesting.NewTestContext(t)
 	secrets := make([]*v1.Secret, 0)
 	fakeRecorder := record.NewFakeRecorder(1)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)

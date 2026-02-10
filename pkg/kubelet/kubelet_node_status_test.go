@@ -205,7 +205,7 @@ func TestUpdateNewNodeStatus(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
-			ctx := context.Background()
+			tCtx := ktesting.Init(t)
 			// generate one more in inputImageList than we configure the Kubelet to report,
 			// or 5 images if unlimited
 			numTestImages := int(tc.nodeStatusMaxImages) + 1
@@ -319,8 +319,8 @@ func TestUpdateNewNodeStatus(t *testing.T) {
 				},
 			}
 
-			kubelet.updateRuntimeUp(ctx)
-			assert.NoError(t, kubelet.updateNodeStatus(ctx))
+			kubelet.updateRuntimeUp(tCtx)
+			assert.NoError(t, kubelet.updateNodeStatus(tCtx))
 			actions := kubeClient.Actions()
 			require.Len(t, actions, 2)
 			require.True(t, actions[1].Matches("patch", "nodes"))
@@ -345,7 +345,7 @@ func TestUpdateNewNodeStatus(t *testing.T) {
 }
 
 func TestUpdateExistingNodeStatus(t *testing.T) {
-	ctx := context.Background()
+	tCtx := ktesting.Init(t)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
@@ -509,8 +509,8 @@ func TestUpdateExistingNodeStatus(t *testing.T) {
 		},
 	}
 
-	kubelet.updateRuntimeUp(ctx)
-	assert.NoError(t, kubelet.updateNodeStatus(ctx))
+	kubelet.updateRuntimeUp(tCtx)
+	assert.NoError(t, kubelet.updateNodeStatus(tCtx))
 
 	actions := kubeClient.Actions()
 	assert.Len(t, actions, 2)
@@ -538,7 +538,7 @@ func TestUpdateExistingNodeStatus(t *testing.T) {
 }
 
 func TestUpdateExistingNodeStatusTimeout(t *testing.T) {
-	ctx := context.Background()
+	tCtx := ktesting.Init(t)
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -592,7 +592,7 @@ func TestUpdateExistingNodeStatusTimeout(t *testing.T) {
 	}
 
 	// should return an error, but not hang
-	assert.Error(t, kubelet.updateNodeStatus(ctx))
+	assert.Error(t, kubelet.updateNodeStatus(tCtx))
 
 	// should have attempted multiple times
 	if actualAttempts := atomic.LoadInt64(&attempts); actualAttempts < nodeStatusUpdateRetry {
@@ -1119,7 +1119,7 @@ func TestUpdateNodeStatusAndVolumesInUseWithNodeLease(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
-			ctx := context.Background()
+			tCtx := ktesting.Init(t)
 			// Setup
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 			defer testKubelet.Cleanup()
@@ -1146,7 +1146,7 @@ func TestUpdateNodeStatusAndVolumesInUseWithNodeLease(t *testing.T) {
 			kubelet.nodeLister = delegatingNodeLister{client: kubeClient}
 
 			// Execute
-			assert.NoError(t, kubelet.updateNodeStatus(ctx))
+			assert.NoError(t, kubelet.updateNodeStatus(tCtx))
 
 			// Validate
 			actions := kubeClient.Actions()
@@ -3059,7 +3059,7 @@ func TestUpdateNodeAddresses(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			ctx := context.Background()
+			tCtx := ktesting.Init(t)
 			oldNode := &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{Name: testKubeletHostname},
 				Spec:       v1.NodeSpec{},
@@ -3075,7 +3075,7 @@ func TestUpdateNodeAddresses(t *testing.T) {
 				},
 			}
 
-			_, err := kubeClient.CoreV1().Nodes().Update(ctx, oldNode, metav1.UpdateOptions{})
+			_, err := kubeClient.CoreV1().Nodes().Update(tCtx, oldNode, metav1.UpdateOptions{})
 			assert.NoError(t, err)
 			kubelet.setNodeStatusFuncs = []func(context.Context, *v1.Node) error{
 				func(_ context.Context, node *v1.Node) error {
@@ -3083,7 +3083,7 @@ func TestUpdateNodeAddresses(t *testing.T) {
 					return nil
 				},
 			}
-			assert.NoError(t, kubelet.updateNodeStatus(ctx))
+			assert.NoError(t, kubelet.updateNodeStatus(tCtx))
 
 			actions := kubeClient.Actions()
 			lastAction := actions[len(actions)-1]
@@ -3197,6 +3197,7 @@ func TestSetNodeStatusDeclaredFeatures(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			tCtx := ktesting.Init(t)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeDeclaredFeatures, tc.featureGateEnabled)
 
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
@@ -3214,7 +3215,7 @@ func TestSetNodeStatusDeclaredFeatures(t *testing.T) {
 
 			// We need to force a status update, so we make the last status report time old.
 			kubelet.lastStatusReportTime = time.Now().Add(-time.Hour)
-			require.NoError(t, kubelet.updateNodeStatus(context.TODO()))
+			require.NoError(t, kubelet.updateNodeStatus(tCtx))
 
 			actions := kubeClient.Actions()
 			// We expect a get and a patch

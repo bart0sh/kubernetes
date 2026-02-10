@@ -2576,7 +2576,7 @@ func TestComputePodActionsWithContainerRestartRules(t *testing.T) {
 		containerRestartPolicyOnFailure = v1.ContainerRestartPolicyOnFailure
 		containerRestartPolicyNever     = v1.ContainerRestartPolicyNever
 	)
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(ctx)
 	require.NoError(t, err)
 
@@ -2699,7 +2699,7 @@ func TestComputePodActionsWithContainerRestartRules(t *testing.T) {
 		if test.mutateStatusFn != nil {
 			test.mutateStatusFn(status)
 		}
-		ctx := context.Background()
+		ctx := ktesting.Init(t)
 		actions := m.computePodActions(ctx, pod, status, false)
 		verifyActions(t, &test.actions, &actions, desc)
 		if test.resetStatusFn != nil {

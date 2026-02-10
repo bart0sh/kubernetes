@@ -17,7 +17,6 @@ limitations under the License.
 package stats
 
 import (
-	"context"
 	"runtime"
 	"testing"
 
@@ -119,7 +118,7 @@ func TestFilterTerminatedContainerInfoAndAssembleByPodCgroupKey(t *testing.T) {
 
 func TestCadvisorListPodStats(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletPSI, true)
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	const (
 		namespace0 = "test0"
 		namespace2 = "test2"
@@ -644,7 +643,7 @@ func TestCadvisorListPodCPUAndMemoryStats(t *testing.T) {
 }
 
 func TestCadvisorImagesFsStatsKubeletSeparateDiskOff(t *testing.T) {
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	var (
 		assert       = assert.New(t)
 		mockCadvisor = cadvisortest.NewMockInterface(t)
@@ -730,7 +729,7 @@ func TestImageFsStatsCustomResponse(t *testing.T) {
 			shouldErr:           false,
 		},
 	} {
-		ctx := context.Background()
+		ctx := ktesting.Init(t)
 		mockCadvisor := cadvisortest.NewMockInterface(t)
 		mockRuntime := containertest.NewMockRuntime(t)
 
@@ -754,7 +753,7 @@ func TestImageFsStatsCustomResponse(t *testing.T) {
 }
 
 func TestCadvisorImagesFsStats(t *testing.T) {
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	var (
 		assert       = assert.New(t)
 		mockCadvisor = cadvisortest.NewMockInterface(t)
@@ -799,7 +798,7 @@ func TestCadvisorImagesFsStats(t *testing.T) {
 }
 
 func TestCadvisorSplitImagesFsStats(t *testing.T) {
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	var (
 		assert       = assert.New(t)
 		mockCadvisor = cadvisortest.NewMockInterface(t)
@@ -852,7 +851,7 @@ func TestCadvisorSplitImagesFsStats(t *testing.T) {
 }
 
 func TestCadvisorSameDiskDifferentLocations(t *testing.T) {
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	var (
 		assert       = assert.New(t)
 		mockCadvisor = cadvisortest.NewMockInterface(t)
@@ -905,7 +904,7 @@ func TestCadvisorSameDiskDifferentLocations(t *testing.T) {
 }
 
 func TestCadvisorListPodStatsWhenContainerLogFound(t *testing.T) {
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	const (
 		namespace0 = "test0"
 	)

@@ -1198,7 +1198,7 @@ func TestMaxParallelImagePullsLimit(t *testing.T) {
 }
 
 func TestParallelPodPullingTimeRecorderWithErr(t *testing.T) {
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	pod1 := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "test_pod1",
@@ -1489,9 +1489,9 @@ func TestEnsureImageExistsWithServiceAccountCoordinates(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			ctx := ktesting.Init(t)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletEnsureSecretPulledImages, tc.enableEnsureSecretImages)
 
-			ctx := context.Background()
 			fakeClock := testingclock.NewFakeClock(time.Now())
 			fakeRuntime := &ctest.FakeRuntime{T: t}
 			fakeRecorder := testutil.NewFakeRecorder()
@@ -1582,7 +1582,7 @@ func TestEnsureImageExistsWithNodeCredentialsOnly(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	fakeRuntime := &ctest.FakeRuntime{T: t}
 	fakeRecorder := testutil.NewFakeRecorder()

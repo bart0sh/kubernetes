@@ -66,6 +66,15 @@ type managerImpl struct {
 	storage       storage
 }
 
+type preShutdownHandler struct {
+	manager *managerImpl
+	ctx     context.Context
+}
+
+func (h *preShutdownHandler) ProcessShutdownEvent() error {
+	return h.manager.ProcessShutdownEvent(h.ctx)
+}
+
 // NewManager returns a new node shutdown manager.
 func NewManager(conf *Config) Manager {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.WindowsGracefulNodeShutdown) {
@@ -149,7 +158,7 @@ func (m *managerImpl) Start(ctx context.Context) error {
 		return err
 	}
 
-	service.SetPreShutdownHandler(m)
+	service.SetPreShutdownHandler(&preShutdownHandler{manager: m, ctx: ctx})
 
 	m.setMetrics()
 

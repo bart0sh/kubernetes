@@ -759,9 +759,8 @@ func (p *podWorkers) UpdatePod(options UpdatePodOptions) {
 	logger := options.Logger
 	// Fallback to extracting logger from context if not provided directly.
 	// This supports callers like killPodNow that cannot easily pass a logger.
-	if logger.GetSink() == nil {
+	if logger.GetSink() == nil && options.Context != nil {
 		logger = klog.FromContext(options.Context)
-		options.Logger = logger
 	}
 	// Handle when the pod is an orphan (no config) and we only have runtime status by running only
 	// the terminating part of the lifecycle. A running pod contains only a minimal set of information
@@ -1139,7 +1138,6 @@ func (p *podWorkers) startPodSync(podUID types.UID) (ctx context.Context, update
 	status, ok := p.podSyncStatuses[podUID]
 	if !ok {
 		// pod status has disappeared, the worker should exit
-		klog.FromContext(ctx).V(4).Info("Pod worker no longer has status, worker should exit", "podUID", podUID)
 		return nil, update, false, false, false
 	}
 	logger := podWorkerLogger(status)
@@ -1166,9 +1164,15 @@ func (p *podWorkers) startPodSync(podUID types.UID) (ctx context.Context, update
 	}
 
 	parent := update.Options.Context
+	if parent == nil && status.activeUpdate != nil {
+		parent = status.activeUpdate.Context
+	}
+	if parent == nil && status.pendingUpdate != nil {
+		parent = status.pendingUpdate.Context
+	}
 	if parent == nil {
-		// Use TODO because this path has no upper-level context and
-		// keep cancellation support via per-sync context for worker operations.
+		// Use TODO as a last-resort fallback for replay/synthetic updates that
+		// currently do not carry an upper-level context through all paths.
 		parent = context.TODO()
 	}
 	ctx = klog.NewContext(parent, logger)
@@ -1649,7 +1653,7 @@ func podWorkerLogger(status *podSyncStatus) klog.Logger {
 			return klog.FromContext(status.activeUpdate.Context)
 		}
 	}
-	return klog.FromContext(context.TODO())
+	return klog.Logger{}
 }
 
 // removeTerminatedWorker cleans up and removes the worker status for a worker

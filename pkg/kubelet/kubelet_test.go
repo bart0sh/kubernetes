@@ -149,7 +149,8 @@ type fakeImageGCManager struct {
 }
 
 func (f *fakeImageGCManager) GetImageList() ([]kubecontainer.Image, error) {
-	return f.fakeImageService.ListImages(context.Background())
+	// ImageGCManager interface does not accept a context parameter.
+	return f.fakeImageService.ListImages(context.TODO())
 }
 
 type TestKubelet struct {
@@ -483,7 +484,7 @@ func newTestPods(count int) []*v1.Pod {
 }
 
 func TestSyncLoopAbort(t *testing.T) {
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
@@ -522,7 +523,7 @@ func TestSyncPodsStartPod(t *testing.T) {
 }
 
 func TestHandlePodCleanupsPerQOS(t *testing.T) {
-	ctx := context.Background()
+	ctx := ktesting.Init(t)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 
@@ -587,6 +588,7 @@ func TestHandlePodCleanupsPerQOS(t *testing.T) {
 }
 
 func TestDispatchWorkOfCompletedPod(t *testing.T) {
+	tCtx := ktesting.Init(t)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
@@ -656,7 +658,7 @@ func TestDispatchWorkOfCompletedPod(t *testing.T) {
 			},
 		},
 	}
-	ctx := context.Background()
+	ctx := tCtx
 	for _, pod := range pods {
 		kubelet.podWorkers.UpdatePod(UpdatePodOptions{
 			Context:    ctx,
@@ -672,6 +674,7 @@ func TestDispatchWorkOfCompletedPod(t *testing.T) {
 }
 
 func TestDispatchWorkOfActivePod(t *testing.T) {
+	tCtx := ktesting.Init(t)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
@@ -716,7 +719,7 @@ func TestDispatchWorkOfActivePod(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := tCtx
 	for _, pod := range pods {
 		kubelet.podWorkers.UpdatePod(UpdatePodOptions{
 			Context:    ctx,
@@ -3052,6 +3055,7 @@ func TestGenerateAPIPodStatusInvokesPodSyncHandlers(t *testing.T) {
 }
 
 func TestSyncTerminatingPodKillPod(t *testing.T) {
+	tCtx := ktesting.Init(t)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kl := testKubelet.kubelet
@@ -3066,7 +3070,7 @@ func TestSyncTerminatingPodKillPod(t *testing.T) {
 	kl.podManager.SetPods(pods)
 	podStatus := &kubecontainer.PodStatus{ID: pod.UID}
 	gracePeriodOverride := int64(0)
-	err := kl.SyncTerminatingPod(context.Background(), pod, podStatus, &gracePeriodOverride, func(podStatus *v1.PodStatus) {
+	err := kl.SyncTerminatingPod(tCtx, pod, podStatus, &gracePeriodOverride, func(podStatus *v1.PodStatus) {
 		podStatus.Phase = v1.PodFailed
 		podStatus.Reason = "reason"
 		podStatus.Message = "message"
@@ -3498,7 +3502,7 @@ func TestSyncPodSpans(t *testing.T) {
 		EnableServiceLinks: ptr.To(false),
 	})
 
-	_, err = kubelet.SyncPod(context.Background(), kubetypes.SyncPodCreate, pod, nil, &kubecontainer.PodStatus{})
+	_, err = kubelet.SyncPod(tCtx, kubetypes.SyncPodCreate, pod, nil, &kubecontainer.PodStatus{})
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, exp.GetSpans())
@@ -3831,6 +3835,7 @@ func TestCrashLoopBackOffConfiguration(t *testing.T) {
 }
 
 func TestSyncPodWithErrorsDuringInPlacePodResize(t *testing.T) {
+	tCtx := ktesting.Init(t)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
@@ -3923,7 +3928,7 @@ func TestSyncPodWithErrorsDuringInPlacePodResize(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			testKubelet.fakeRuntime.SyncResults = tc.syncResults
 			testKubelet.fakeRuntime.PodResizeInProgress = tc.podResizeInProgress
-			isTerminal, err := kubelet.SyncPod(context.Background(), kubetypes.SyncPodUpdate, pod, nil, &kubecontainer.PodStatus{})
+			isTerminal, err := kubelet.SyncPod(tCtx, kubetypes.SyncPodUpdate, pod, nil, &kubecontainer.PodStatus{})
 			require.False(t, isTerminal)
 			if tc.expectedErr == "" {
 				require.NoError(t, err)

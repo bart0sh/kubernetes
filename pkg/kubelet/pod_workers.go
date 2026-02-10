@@ -1744,8 +1744,8 @@ func killPodNow(podWorkers PodWorkers, recorder record.EventRecorder) eviction.K
 		// open a channel we block against until we get a result
 		ch := make(chan struct{}, 1)
 		podWorkers.UpdatePod(UpdatePodOptions{
-		// Use context.TODO() because KillPodFunc interface does not provide a context parameter.
-		// The context will be used for logging via the fallback mechanism in UpdatePod.
+			// Use context.TODO() because KillPodFunc interface does not provide a context parameter.
+			// The context will be used for logging via the fallback mechanism in UpdatePod.
 			Context:    context.TODO(),
 			Pod:        pod,
 			UpdateType: kubetypes.SyncPodKill,

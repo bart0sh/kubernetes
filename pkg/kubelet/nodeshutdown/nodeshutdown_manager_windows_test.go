@@ -33,6 +33,7 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
+	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/ktesting"
 	_ "k8s.io/klog/v2/ktesting/init" // activate ktesting command line flags
 	pkgfeatures "k8s.io/kubernetes/pkg/features"
@@ -245,7 +246,7 @@ func Test_managerImpl_ProcessShutdownEvent(t *testing.T) {
 					clock:                            tt.fields.clock,
 				},
 			}
-			if err := m.ProcessShutdownEvent(tCtx); (err != nil) != tt.wantErr {
+			if err := m.ProcessShutdownEvent(klog.NewContext(tCtx, logger)); (err != nil) != tt.wantErr {
 				t.Errorf("managerImpl.processShutdownEvent() error = %v, wantErr %v", err, tt.wantErr)
 			}
 

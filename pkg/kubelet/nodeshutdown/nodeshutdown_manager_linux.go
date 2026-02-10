@@ -298,10 +298,7 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 
 				if isShuttingDown {
 					// Update node status and ready condition
-					// Use the manager context (typically the Kubelet context) to ensure sync operations
-					// are cancelled when Kubelet is terminating while preserving structured logging.
-					nodeStatusCtx := klog.NewContext(ctx, m.logger)
-					go m.syncNodeStatus(nodeStatusCtx)
+					go m.syncNodeStatus(ctx)
 
 					if err := m.processShutdownEvent(ctx); err != nil {
 						m.logger.Error(err, "Shutdown manager failed to process shutdown event")

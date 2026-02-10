@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package e2enode
+package node
 
 import (
 	v1 "k8s.io/api/core/v1"
@@ -32,6 +32,10 @@ const (
 	SampleDeviceResourceName = "example.com/resource"
 
 	SampleDeviceEnvVarNamePluginSockDir = "PLUGIN_SOCK_DIR"
+
+	// TODO(vikasc): Instead of hard-coding number of devices, provide number of devices in the sample-device-plugin using configmap
+	// and then use the same here
+	SampleDevsAmount int64 = 2
 )
 
 // CountSampleDeviceCapacity returns the number of devices of SampleDeviceResourceName advertised by a node capacity
